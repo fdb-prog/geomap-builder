@@ -1779,6 +1779,9 @@ function switchData(n){
   const labelCode = (S.lblVal || S.lblNome) ? `
   const labG=svgMap.append('g').attr('pointer-events','none');
   ${shadowFilter ? `(function(){const defs=svgMap.select('defs').empty()?svgMap.append('defs'):svgMap.select('defs');defs.html(defs.html()+'${shadowFilter.replace(/'/g,"\\'")}');})();` : ''}
+
+  // ── PASSATA 1: raccoglie tutti i candidati con posizione inline ──
+  const allItems=[];
   geoData.features.forEach(feat=>{
     const name=feat.properties[GEO_PROP]||'';
     const v=lookup(name);
@@ -1792,86 +1795,122 @@ function switchData(n){
     const tc=${lblColorCode};
     const lines=[];
     ${S.lblNome ? `lines.push(name.length>9?name.slice(0,8)+'…':name);` : ''}
-    ${S.lblVal ? `lines.push(v!==null?fmt(v):'');` : ''}
+    ${S.lblVal ? `if(v!==null)lines.push(fmt(v));` : ''}
     const validLines=lines.filter(Boolean);
     if(!validLines.length)return;
     const maxChars=validLines.reduce((mx,l)=>Math.max(mx,l.length),0);
-    const textW=maxChars*fs*0.62;
-    const useLeader=${S.lblPos === 'leader' ? 'true' : 'false'} && (textW>areaW*0.85 || areaW<20 || areaH<14);
-    if(useLeader){
-      // Margine interno: la label deve uscire OLTRE il bordo della mappa
-      // Usiamo 4 zone di destinazione: sinistra, destra, sopra, sotto
-      // Scegliamo la zona più vicina al centroide
-      const margin=8; // padding dal bordo SVG
-      const labelH=validLines.length*fs*1.4;
-      // Distanza dal centroide a ciascun bordo
-      const dL=c[0];           // verso sinistra
-      const dR=W-c[0];         // verso destra
-      const dT=c[1];           // verso alto
-      const dB=H-c[1];         // verso basso
-      const minD=Math.min(dL,dR,dT,dB);
-      let anchor, lx, ly, kx, ky; // lx,ly = punto di arrivo label; kx,ky = punto del gomito sul bordo
-      if(minD===dT){
-        // Esce in ALTO — gomito verticale
-        ky=margin+labelH/2; kx=c[0];
-        lx=kx; ly=ky;
-        anchor='middle';
-      } else if(minD===dB){
-        // Esce in BASSO
-        ky=H-margin-labelH/2; kx=c[0];
-        lx=kx; ly=ky;
-        anchor='middle';
-      } else if(minD===dL){
-        // Esce a SINISTRA
-        kx=margin+textW+4; ky=c[1];
-        lx=kx; ly=ky;
-        anchor='end';
-      } else {
-        // Esce a DESTRA
-        kx=W-margin-textW-4; ky=c[1];
-        lx=kx; ly=ky;
-        anchor='start';
+    const textW=maxChars*fs*0.64;
+    const textH=validLines.length*fs*1.5;
+    // bbox inline centrata sul centroide
+    const ix=c[0]-textW/2, iy=c[1]-textH/2;
+    allItems.push({name,v,c,areaW,areaH,fs,tc,validLines,textW,textH,ix,iy,bounds});
+  });
+
+  // Ordina per area decrescente: le grandi hanno priorità di stare inline
+  allItems.sort((a,b)=>b.areaW*b.areaH - a.areaW*a.areaH);
+
+  // ── PASSATA 2: assegna inline o leader, con collision detection ──
+  const placed=[]; // {x,y,w,h} bounding box delle label già piazzate
+
+  function overlaps(ax,ay,aw,ah){
+    const pad=3;
+    return placed.some(p=>!(ax+aw+pad<p.x||ax-pad>p.x+p.w||ay+ah+pad<p.y||ay-pad>p.y+p.h));
+  }
+
+  // Funzione che trova posizione leader sul bordo più vicino, con slot libero
+  function findLeaderPos(c,textW,textH){
+    const pad=4;
+    const dL=c[0], dR=W-c[0], dT=c[1], dB=H-c[1];
+    // Ordina i 4 lati per vicinanza
+    const sides=[
+      {side:'L',dist:dL},{side:'R',dist:dR},
+      {side:'T',dist:dT},{side:'B',dist:dB}
+    ].sort((a,b)=>a.dist-b.dist);
+
+    for(const {side} of sides){
+      let bx,by;
+      if(side==='L'){bx=pad; by=c[1]-textH/2;}
+      else if(side==='R'){bx=W-pad-textW; by=c[1]-textH/2;}
+      else if(side==='T'){bx=c[0]-textW/2; by=pad;}
+      else {bx=c[0]-textW/2; by=H-pad-textH;}
+
+      // Clamp dentro il SVG
+      bx=Math.max(pad,Math.min(W-textW-pad,bx));
+      by=Math.max(pad,Math.min(H-textH-pad,by));
+
+      // Prova questo slot, se libero usalo
+      if(!overlaps(bx,by,textW,textH)){
+        return {bx,by,side};
       }
-      // Linea a gomito: dal centroide, prima orizzontale poi verticale (o viceversa)
-      // Per sinistra/destra: linea orizzontale diretta
-      // Per alto/basso: prima orizzontale fino a kx, poi verticale
-      let polyPts;
-      if(anchor==='middle'){
-        // gomito: centroide → (c[0], ky) oppure linea dritta se già allineati
-        polyPts=\`\${c[0]},\${c[1]} \${c[0]},\${ky}\`;
-      } else {
-        polyPts=\`\${c[0]},\${c[1]} \${lx},\${c[1]}\`;
+      // Altrimenti prova a scorrere lungo il bordo (±slot)
+      const slots=[-1,1,-2,2,-3,3,-4,4];
+      for(const s of slots){
+        let bx2=bx, by2=by;
+        if(side==='L'||side==='R') by2=by+s*(textH+4);
+        else bx2=bx+s*(textW+6);
+        bx2=Math.max(pad,Math.min(W-textW-pad,bx2));
+        by2=Math.max(pad,Math.min(H-textH-pad,by2));
+        if(!overlaps(bx2,by2,textW,textH)) return {bx:bx2,by:by2,side};
       }
-      labG.append('polyline')
-        .attr('points',polyPts)
-        .attr('stroke','rgba(80,100,140,0.6)').attr('stroke-width',.8)
-        .attr('fill','none');
-      labG.append('circle').attr('cx',c[0]).attr('cy',c[1]).attr('r',2.2).attr('fill','rgba(80,100,140,0.75)');
-      // Sfondo label
-      const bx=anchor==='start'?lx:anchor==='end'?lx-textW-4:lx-textW/2-2;
-      const by=ly-labelH/2-2;
-      labG.append('rect').attr('x',bx).attr('y',by)
-        .attr('width',textW+4).attr('height',labelH+4)
-        .attr('rx',2).attr('fill','rgba(255,255,255,0.88)')
-        .attr('stroke','rgba(160,175,200,0.5)').attr('stroke-width',.5);
-      validLines.forEach((l,li)=>{
-        const tx=anchor==='start'?lx+2:anchor==='end'?lx-2:lx;
-        const ty=ly+(li-(validLines.length-1)/2)*fs*1.4;
-        const el=labG.append('text')
-          .attr('x',tx).attr('y',ty)
-          .attr('text-anchor',anchor).attr('dominant-baseline','middle')
-          .attr('font-size',fs).attr('fill','#1a2440').text(l);
-        ${S.lblBold ? `el.attr('font-weight','700');` : ''}
-      });
-    } else {
-      ${bgRect}
+    }
+    return null; // nessuno slot libero (non dovrebbe succedere)
+  }
+
+  allItems.forEach(item=>{
+    const {c,areaW,areaH,fs,tc,validLines,textW,textH,ix,iy}=item;
+    const forceLeader=${S.lblPos === 'leader' ? 'true' : 'false'};
+
+    // Decide se inline è possibile: non forza leader, testo entra nella provincia, nessuna sovrapposizione
+    const fitsInside=textW<areaW*0.88 && textH<areaH*0.85;
+    const inlineFree=!forceLeader && fitsInside && !overlaps(ix,iy,textW,textH);
+
+    if(inlineFree){
+      // ── INLINE ──
+      placed.push({x:ix,y:iy,w:textW,h:textH});
+      ${S.lblBg ? `labG.append('rect').attr('x',ix-1).attr('y',iy-1).attr('width',textW+2).attr('height',textH+2).attr('rx',2).attr('fill','rgba(255,255,255,0.55)');` : ''}
       validLines.forEach((l,li)=>{
         const el=labG.append('text')
-          .attr('x',c[0]).attr('y',c[1]+(li-(validLines.length-1)/2)*fs*1.3)
+          .attr('x',c[0]).attr('y',c[1]+(li-(validLines.length-1)/2)*fs*1.5)
           .attr('text-anchor','middle').attr('dominant-baseline','middle')
           .attr('font-size',fs).attr('fill',tc).text(l);
         ${S.lblBold ? `el.attr('font-weight','700');` : ''}
         ${S.lblShadow ? `el.attr('filter','url(#lbl-shadow)');` : ''}
+      });
+    } else {
+      // ── LEADER LINE verso bordo più vicino ──
+      const pos=findLeaderPos(c,textW,textH);
+      if(!pos)return;
+      const {bx,by,side}=pos;
+      placed.push({x:bx,y:by,w:textW,h:textH});
+
+      // Punto di ancoraggio testo (centro del box)
+      const lx=bx+textW/2, ly=by+textH/2;
+
+      // Linea a gomito: dal centroide al punto di ancoraggio
+      // Se lato L/R: orizzontale; se T/B: verticale
+      let pts;
+      if(side==='L'||side==='R'){
+        pts=\`\${c[0]},\${c[1]} \${side==='L'?bx+textW+6:bx-6},\${c[1]}\`;
+      } else {
+        pts=\`\${c[0]},\${c[1]} \${c[0]},\${side==='T'?by+textH+6:by-6}\`;
+      }
+      labG.append('polyline').attr('points',pts)
+        .attr('stroke','rgba(80,105,145,0.55)').attr('stroke-width',.9).attr('fill','none');
+      labG.append('circle').attr('cx',c[0]).attr('cy',c[1]).attr('r',2).attr('fill','rgba(80,105,145,0.7)');
+
+      // Box sfondo
+      labG.append('rect').attr('x',bx).attr('y',by)
+        .attr('width',textW+2).attr('height',textH+2)
+        .attr('rx',2).attr('fill','rgba(255,255,255,0.9)')
+        .attr('stroke','rgba(150,170,205,0.5)').attr('stroke-width',.5);
+
+      // Testo
+      validLines.forEach((l,li)=>{
+        const el=labG.append('text')
+          .attr('x',lx).attr('y',by+2+(li+0.5)*fs*1.5)
+          .attr('text-anchor','middle').attr('dominant-baseline','middle')
+          .attr('font-size',fs).attr('fill','#1a2440').text(l);
+        ${S.lblBold ? `el.attr('font-weight','700');` : ''}
       });
     }
   });` : '';
