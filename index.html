@@ -1,0 +1,2142 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GeoMap Builder v2.0</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+:root{
+  --bg:#0c0d12;--surface:#13141b;--surface2:#1a1c25;--surface3:#20222e;
+  --border:#252733;--border2:#2f3244;--border3:#3a3d52;
+  --accent:#5b8fff;--accent2:#7aa3ff;--accent-dim:rgba(91,143,255,.12);--accent-dim2:rgba(91,143,255,.06);
+  --green:#4ade80;--green-dim:rgba(74,222,128,.12);
+  --yellow:#fbbf24;--red:#f87171;--purple:#a78bfa;
+  --text:#e4e6f0;--text2:#8890a8;--text3:#555a6e;--text4:#383c4e;
+  --font:'DM Sans',sans-serif;--mono:'DM Mono',monospace;
+  --r:10px;--r-sm:7px;--r-lg:14px;
+}
+html{scroll-behavior:smooth;}
+body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:100vh;font-size:14px;}
+::-webkit-scrollbar{width:5px;height:5px;}
+::-webkit-scrollbar-track{background:var(--bg);}
+::-webkit-scrollbar-thumb{background:var(--border3);border-radius:3px;}
+
+/* ── HEADER ── */
+.header{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:16px 28px;border-bottom:1px solid var(--border);
+  position:sticky;top:0;z-index:200;
+  background:rgba(12,13,18,.94);backdrop-filter:blur(14px);
+}
+.logo{display:flex;align-items:center;gap:10px;}
+.logo-mark{
+  width:32px;height:32px;border-radius:9px;
+  background:linear-gradient(135deg,#3b5bdb,#5b8fff);
+  display:flex;align-items:center;justify-content:center;font-size:16px;
+}
+.logo h1{font-size:.95rem;font-weight:700;letter-spacing:-.2px;}
+.logo p{font-size:.68rem;color:var(--text3);margin-top:1px;}
+.header-right{display:flex;align-items:center;gap:10px;}
+.version-badge{
+  font-size:.68rem;font-family:var(--mono);color:var(--accent);
+  background:var(--accent-dim);border:1px solid rgba(91,143,255,.25);
+  padding:3px 9px;border-radius:20px;
+}
+.btn-icon{
+  width:30px;height:30px;border-radius:var(--r-sm);border:1px solid var(--border2);
+  background:var(--surface2);color:var(--text2);font-size:.85rem;
+  cursor:pointer;display:flex;align-items:center;justify-content:center;
+  transition:all .15s;
+}
+.btn-icon:hover{border-color:var(--accent);color:var(--accent);}
+
+/* ── LAYOUT ── */
+.app{display:grid;grid-template-columns:400px 1fr;min-height:calc(100vh - 57px);}
+@media(max-width:860px){.app{grid-template-columns:1fr;}}
+
+/* ── SIDEBAR ── */
+.sidebar{
+  border-right:1px solid var(--border);
+  overflow-y:auto;display:flex;flex-direction:column;
+}
+.sidebar-body{padding:16px;display:flex;flex-direction:column;gap:8px;flex:1;}
+.sidebar-foot{
+  padding:14px 16px;border-top:1px solid var(--border);
+  background:var(--surface);position:sticky;bottom:0;
+}
+
+/* ── ACCORDION SECTION ── */
+.acc{border:1px solid var(--border);border-radius:var(--r);overflow:hidden;transition:border-color .2s;}
+.acc.open{border-color:var(--border2);}
+.acc.filled{border-color:rgba(91,143,255,.3);}
+.acc-head{
+  display:flex;align-items:center;gap:8px;padding:11px 13px;
+  cursor:pointer;background:var(--surface);user-select:none;transition:background .15s;
+}
+.acc-head:hover{background:var(--surface2);}
+.acc-num{
+  width:20px;height:20px;border-radius:5px;flex-shrink:0;
+  background:var(--surface3);border:1px solid var(--border2);
+  font-size:.65rem;font-weight:700;font-family:var(--mono);
+  color:var(--text3);display:flex;align-items:center;justify-content:center;
+  transition:all .2s;
+}
+.acc.filled .acc-num{background:var(--accent-dim);border-color:rgba(91,143,255,.4);color:var(--accent);}
+.acc-title{font-size:.83rem;font-weight:600;flex:1;color:var(--text);}
+.acc-tag{
+  font-size:.65rem;font-family:var(--mono);color:var(--text3);
+  max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.acc.filled .acc-tag{color:var(--accent2);}
+.acc-chev{color:var(--text3);font-size:.7rem;transition:transform .2s;}
+.acc.open .acc-chev{transform:rotate(180deg);}
+.acc-body{
+  max-height:0;
+  overflow:hidden;
+  background:var(--surface);
+  border-top:0px solid var(--border);
+  transition:max-height .28s cubic-bezier(.4,0,.2,1), padding .28s ease, border-top-width .1s ease;
+  padding:0 14px;
+}
+.acc.open .acc-body{
+  max-height:2000px;
+  padding:14px;
+  border-top-width:1px;
+}
+
+/* ── FIELD PRIMITIVES ── */
+.fstack{display:flex;flex-direction:column;gap:12px;}
+.frow{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+.fgroup{}
+.flabel{
+  display:block;font-size:.68rem;font-weight:700;
+  color:var(--text3);text-transform:uppercase;letter-spacing:.6px;margin-bottom:5px;
+}
+.flabel span{color:var(--text3);font-weight:400;text-transform:none;letter-spacing:0;margin-left:4px;}
+input[type=text],input[type=number],select,textarea{
+  width:100%;background:var(--surface2);border:1px solid var(--border2);
+  border-radius:var(--r-sm);color:var(--text);font-family:var(--font);
+  font-size:.81rem;padding:8px 10px;outline:none;transition:border-color .15s;
+}
+input:focus,select:focus,textarea:focus{border-color:rgba(91,143,255,.55);}
+select option{background:var(--surface2);}
+textarea{resize:vertical;min-height:60px;line-height:1.5;}
+input[type=color]{
+  width:36px;height:30px;padding:2px;border-radius:var(--r-sm);
+  border:1px solid var(--border2);background:var(--surface2);cursor:pointer;
+}
+.hint{font-size:.7rem;color:var(--text3);margin-top:4px;line-height:1.5;}
+.hint.warn{color:var(--yellow);}
+.hint.info{color:var(--accent2);}
+.divider{border:none;border-top:1px solid var(--border);margin:10px 0;}
+
+/* ── RADIO / CHECK ── */
+.rgroup,.cgroup{display:flex;flex-direction:column;gap:5px;}
+.rgroup.horizontal,.cgroup.horizontal{flex-direction:row;flex-wrap:wrap;}
+.ritem,.citem{
+  display:flex;align-items:flex-start;gap:8px;padding:8px 10px;
+  border-radius:var(--r-sm);border:1px solid var(--border);
+  cursor:pointer;transition:all .15s;background:var(--surface2);
+}
+.ritem:hover,.citem:hover{border-color:var(--border2);}
+.ritem.sel,.citem.sel{border-color:rgba(91,143,255,.45);background:var(--accent-dim);}
+.ritem input,.citem input{display:none;}
+.rdot{
+  width:13px;height:13px;border-radius:50%;border:2px solid var(--border3);
+  flex-shrink:0;margin-top:1px;transition:all .15s;
+  display:flex;align-items:center;justify-content:center;
+}
+.ritem.sel .rdot{border-color:var(--accent);background:var(--accent);}
+.ritem.sel .rdot::after{content:'';width:4px;height:4px;border-radius:50%;background:var(--bg);}
+.cbox{
+  width:13px;height:13px;border-radius:3px;border:2px solid var(--border3);
+  flex-shrink:0;margin-top:1px;transition:all .15s;
+  display:flex;align-items:center;justify-content:center;font-size:8px;color:transparent;
+}
+.citem.sel .cbox{border-color:var(--accent);background:var(--accent);color:var(--bg);}
+.rtext{font-size:.79rem;color:var(--text);}
+.rdesc{font-size:.68rem;color:var(--text3);margin-top:1px;}
+
+/* ── PALETTE GRID ── */
+.palette-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px;}
+.pal-item{
+  border:2px solid var(--border);border-radius:var(--r-sm);
+  padding:7px 9px;cursor:pointer;transition:all .15s;background:var(--surface2);
+}
+.pal-item:hover{border-color:var(--border2);}
+.pal-item.sel{border-color:rgba(91,143,255,.5);background:var(--accent-dim);}
+.pal-bar{height:7px;border-radius:4px;margin-bottom:4px;}
+.pal-name{font-size:.68rem;color:var(--text2);}
+.custom-colors{display:none;gap:8px;margin-top:8px;align-items:flex-end;}
+.custom-colors.show{display:flex;}
+.col-pick-wrap{display:flex;flex-direction:column;gap:3px;}
+.col-pick-label{font-size:.65rem;color:var(--text3);}
+.col-swatch{
+  width:38px;height:32px;border-radius:var(--r-sm);
+  border:1px solid var(--border2);overflow:hidden;cursor:pointer;
+}
+.col-swatch input{width:200%;height:200%;margin:-50%;cursor:pointer;border:none;}
+.pal-preview{
+  flex:1;height:32px;border-radius:var(--r-sm);
+  border:1px solid var(--border2);
+}
+
+/* ── FILE DROP ── */
+.file-drop{
+  border:2px dashed var(--border3);border-radius:var(--r);
+  padding:24px 16px;text-align:center;cursor:pointer;
+  transition:all .2s;position:relative;
+}
+.file-drop:hover,.file-drop.drag{border-color:var(--accent);background:var(--accent-dim2);}
+.file-drop input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;}
+.fd-icon{font-size:1.8rem;margin-bottom:6px;}
+.fd-label{font-size:.82rem;color:var(--text2);}
+.fd-label strong{color:var(--accent);}
+.fd-meta{font-size:.68rem;color:var(--text3);margin-top:3px;font-family:var(--mono);}
+
+.file-ok{
+  display:none;background:rgba(74,222,128,.06);border:1px solid rgba(74,222,128,.2);
+  border-radius:var(--r-sm);padding:10px 12px;margin-top:10px;
+}
+.file-ok.show{display:block;}
+.file-ok-name{font-size:.8rem;font-weight:600;color:var(--green);}
+.file-ok-meta{font-size:.68rem;color:var(--text3);margin-top:2px;font-family:var(--mono);}
+
+.col-sel{display:none;margin-top:10px;}
+.col-sel.show{display:flex;flex-direction:column;gap:8px;}
+
+/* ── VALIDATION PANEL ── */
+.val-panel{
+  display:none;margin-top:10px;border-radius:var(--r-sm);overflow:hidden;
+  border:1px solid var(--border2);
+}
+.val-panel.show{display:block;}
+.val-row{
+  display:flex;align-items:flex-start;gap:8px;padding:7px 10px;
+  border-top:1px solid var(--border);font-size:.72rem;
+}
+.val-row:first-child{border-top:none;}
+.val-row.ok{background:rgba(74,222,128,.04);}
+.val-row.warn{background:rgba(251,191,36,.04);}
+.val-row.err{background:rgba(248,113,113,.04);}
+.val-icon{font-size:.85rem;flex-shrink:0;margin-top:1px;}
+.val-text{color:var(--text2);line-height:1.5;}
+.val-text b{color:var(--text);}
+
+/* ── HIGHLIGHT GROUPS ── */
+.hl-group{
+  background:var(--surface3);border:1px solid var(--border2);
+  border-radius:var(--r-sm);padding:10px 12px;
+  display:flex;flex-direction:column;gap:6px;
+}
+.hl-row{display:flex;align-items:center;gap:6px;}
+.hl-remove{
+  width:20px;height:20px;border-radius:4px;border:1px solid var(--border2);
+  background:none;color:var(--text3);cursor:pointer;font-size:.75rem;
+  display:flex;align-items:center;justify-content:center;
+}
+.hl-remove:hover{border-color:var(--red);color:var(--red);}
+.add-hl-btn{
+  display:flex;align-items:center;gap:6px;padding:7px 10px;
+  border:1px dashed var(--border3);border-radius:var(--r-sm);
+  background:none;color:var(--text3);cursor:pointer;font-size:.75rem;
+  font-family:var(--font);width:100%;transition:all .15s;
+}
+.add-hl-btn:hover{border-color:var(--accent);color:var(--accent);}
+
+/* ── TEMPLATE PANEL ── */
+.tpl-panel{
+  background:var(--surface2);border:1px solid var(--border2);
+  border-radius:var(--r-sm);padding:10px 12px;margin-bottom:10px;
+}
+.tpl-list{display:flex;flex-direction:column;gap:5px;max-height:160px;overflow-y:auto;}
+.tpl-item{
+  display:flex;align-items:center;gap:8px;padding:7px 10px;
+  background:var(--surface3);border:1px solid var(--border);
+  border-radius:var(--r-sm);cursor:pointer;transition:all .15s;
+}
+.tpl-item:hover{border-color:var(--accent);}
+.tpl-item-name{font-size:.78rem;flex:1;color:var(--text);}
+.tpl-item-meta{font-size:.65rem;color:var(--text3);font-family:var(--mono);}
+.tpl-del{
+  width:18px;height:18px;border-radius:3px;border:none;
+  background:none;color:var(--text3);cursor:pointer;font-size:.7rem;
+}
+.tpl-del:hover{color:var(--red);}
+.tpl-empty{font-size:.75rem;color:var(--text3);text-align:center;padding:10px;}
+.save-tpl-row{display:flex;gap:6px;margin-top:8px;}
+
+/* ── PROGRESS ── */
+.progress-wrap{padding:0 16px;margin-bottom:4px;}
+.progress-track{height:2px;background:var(--border);border-radius:1px;overflow:hidden;}
+.progress-fill{height:100%;background:linear-gradient(90deg,var(--accent),var(--green));width:0%;transition:width .4s;}
+.progress-label{font-size:.65rem;color:var(--text3);margin-top:3px;text-align:right;font-family:var(--mono);}
+
+/* ── GENERATE BTN ── */
+.btn-gen{
+  width:100%;padding:13px;
+  background:linear-gradient(135deg,#3b5bdb,var(--accent));
+  color:#fff;font-family:var(--font);font-size:.88rem;font-weight:700;
+  border:none;border-radius:var(--r);cursor:pointer;
+  transition:all .2s;display:flex;align-items:center;justify-content:center;gap:7px;
+  letter-spacing:-.1px;
+}
+.btn-gen:hover{filter:brightness(1.1);transform:translateY(-1px);}
+.btn-gen:active{transform:translateY(0);}
+.btn-gen:disabled{background:var(--border2);color:var(--text3);cursor:not-allowed;transform:none;filter:none;}
+
+/* ── MAIN AREA ── */
+.main{
+  display:flex;flex-direction:column;
+  background:var(--bg);
+}
+.main-toolbar{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:12px 20px;border-bottom:1px solid var(--border);
+  background:var(--surface);flex-shrink:0;
+}
+.main-tabs{display:flex;gap:4px;}
+.tab-btn{
+  padding:6px 13px;border-radius:var(--r-sm);font-family:var(--font);
+  font-size:.78rem;font-weight:600;border:none;cursor:pointer;
+  background:none;color:var(--text3);transition:all .15s;
+}
+.tab-btn.active{background:var(--accent-dim);color:var(--accent2);}
+.tab-btn:hover:not(.active){color:var(--text2);}
+.main-actions{display:flex;gap:6px;}
+
+.tab-content{display:none;flex:1;}
+.tab-content.active{display:flex;flex-direction:column;flex:1;}
+
+/* ── EMPTY STATE ── */
+.empty{
+  flex:1;display:flex;flex-direction:column;align-items:center;
+  justify-content:center;padding:40px;text-align:center;
+}
+.empty-icon{font-size:3rem;opacity:.25;margin-bottom:14px;}
+.empty-title{font-size:1rem;font-weight:600;color:var(--text2);margin-bottom:6px;}
+.empty-desc{font-size:.8rem;color:var(--text3);line-height:1.7;max-width:380px;}
+.empty-steps{
+  display:flex;flex-direction:column;gap:7px;
+  margin-top:22px;text-align:left;width:100%;max-width:300px;
+}
+.estep{display:flex;align-items:center;gap:8px;font-size:.76rem;color:var(--text3);}
+.estep.active{color:var(--text2);}
+.edot{width:5px;height:5px;border-radius:50%;background:var(--border3);flex-shrink:0;}
+.estep.active .edot{background:var(--accent);}
+
+/* ── RESULT ── */
+.result-wrap{flex:1;display:flex;flex-direction:column;overflow:hidden;}
+.result-header{
+  padding:14px 20px;border-bottom:1px solid var(--border);
+  display:flex;align-items:center;gap:12px;flex-shrink:0;
+}
+.result-info{flex:1;}
+.result-title{font-size:.92rem;font-weight:700;}
+.result-meta{font-size:.7rem;color:var(--text3);font-family:var(--mono);margin-top:2px;}
+.result-btns{display:flex;gap:6px;}
+.preview-area{flex:1;background:var(--bg);display:flex;align-items:flex-start;justify-content:center;padding:16px;overflow:auto;}
+.preview-area iframe{width:100%;min-height:540px;border:none;border-radius:var(--r);border:1px solid var(--border);}
+.config-grid{
+  display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px;
+  padding:14px 20px;border-top:1px solid var(--border);flex-shrink:0;
+}
+.cfg{background:var(--surface2);border-radius:var(--r-sm);padding:8px 10px;border:1px solid var(--border);}
+.cfg-l{font-size:.63rem;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;font-weight:700;margin-bottom:2px;}
+.cfg-v{font-size:.76rem;color:var(--text2);font-family:var(--mono);}
+
+/* ── VALIDATION TAB ── */
+.val-tab-wrap{flex:1;padding:20px;overflow-y:auto;}
+.val-section-title{font-size:.78rem;font-weight:700;color:var(--text2);margin-bottom:8px;text-transform:uppercase;letter-spacing:.5px;}
+.val-card{
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--r);overflow:hidden;margin-bottom:14px;
+}
+.val-card-head{
+  padding:10px 14px;background:var(--surface2);border-bottom:1px solid var(--border);
+  font-size:.78rem;font-weight:600;display:flex;align-items:center;gap:6px;
+}
+.val-items{padding:6px;}
+.val-item{
+  display:flex;align-items:flex-start;gap:8px;padding:7px 8px;
+  border-radius:var(--r-sm);margin-bottom:2px;font-size:.76rem;
+}
+.val-item.ok{background:rgba(74,222,128,.06);color:var(--green);}
+.val-item.warn{background:rgba(251,191,36,.06);color:var(--yellow);}
+.val-item.err{background:rgba(248,113,113,.06);color:var(--red);}
+
+/* ── BUTTONS ── */
+.btn{
+  padding:7px 13px;border-radius:var(--r-sm);font-family:var(--font);
+  font-size:.77rem;font-weight:600;cursor:pointer;border:none;transition:all .15s;
+}
+.btn-primary{background:var(--accent);color:#fff;}
+.btn-primary:hover{background:var(--accent2);}
+.btn-secondary{background:var(--surface3);color:var(--text2);border:1px solid var(--border2);}
+.btn-secondary:hover{border-color:var(--accent);color:var(--accent);}
+.btn-ghost{background:none;color:var(--text2);border:1px solid var(--border2);}
+.btn-ghost:hover{border-color:var(--border3);}
+.btn-sm{padding:5px 9px;font-size:.72rem;}
+
+/* ── TOAST ── */
+.toast{
+  position:fixed;bottom:20px;right:20px;max-width:280px;
+  background:var(--surface3);border:1px solid var(--border2);
+  border-radius:var(--r);padding:10px 14px;font-size:.78rem;
+  z-index:9999;transform:translateY(14px);opacity:0;transition:all .25s;
+}
+.toast.show{transform:translateY(0);opacity:1;}
+.toast.success{border-color:rgba(74,222,128,.4);}
+.toast.error{border-color:rgba(248,113,113,.4);}
+
+/* ── OVERLAY ── */
+.overlay{
+  display:none;position:fixed;inset:0;background:rgba(12,13,18,.8);
+  backdrop-filter:blur(8px);z-index:800;
+  align-items:center;justify-content:center;flex-direction:column;gap:14px;
+}
+.overlay.show{display:flex;}
+.spin{
+  width:42px;height:42px;border:3px solid var(--border2);
+  border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite;
+}
+@keyframes spin{to{transform:rotate(360deg);}}
+.overlay-text{font-size:.85rem;color:var(--text2);}
+
+/* ── MODAL ── */
+.modal-backdrop{
+  display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);
+  z-index:900;align-items:center;justify-content:center;
+}
+.modal-backdrop.show{display:flex;}
+.modal{
+  background:var(--surface);border:1px solid var(--border2);
+  border-radius:var(--r-lg);padding:22px;width:360px;max-width:90vw;
+}
+.modal-title{font-size:.95rem;font-weight:700;margin-bottom:14px;}
+.modal-btns{display:flex;gap:8px;margin-top:16px;justify-content:flex-end;}
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<header class="header">
+  <div class="logo">
+    <div class="logo-mark">🗺</div>
+    <div>
+      <h1>GeoMap Builder</h1>
+      <p>Mappe coropletiche interattive per l'Italia e l'Europa</p>
+    </div>
+  </div>
+  <div class="header-right">
+    <button class="btn-icon" title="Carica configurazione JSON" onclick="loadConfigJSON()">📂</button>
+    <button class="btn-icon" title="Salva configurazione JSON" onclick="saveConfigJSON()">💾</button>
+    <span class="version-badge">v2.0</span>
+  </div>
+</header>
+
+<!-- LAYOUT -->
+<div class="app">
+
+<!-- ════════════════════ SIDEBAR ════════════════════ -->
+<aside class="sidebar">
+<div class="sidebar-body">
+
+<!-- TEMPLATE -->
+<div class="acc" id="acc-tpl">
+  <div class="acc-head" onclick="toggle('acc-tpl')">
+    <span class="acc-num">★</span>
+    <span class="acc-title">Template salvati</span>
+    <span class="acc-tag" id="tag-tpl">—</span>
+    <span class="acc-chev">▼</span>
+  </div>
+  <div class="acc-body">
+    <div class="tpl-panel">
+      <div class="tpl-list" id="tpl-list"><div class="tpl-empty">Nessun template salvato</div></div>
+    </div>
+    <div class="save-tpl-row">
+      <input type="text" id="tpl-name" placeholder="Nome template…" style="flex:1;">
+      <button class="btn btn-primary btn-sm" onclick="saveTemplate()">Salva</button>
+    </div>
+    <p class="hint info" style="margin-top:6px;">I template sono salvati nel browser — disponibili anche alla prossima apertura.</p>
+  </div>
+</div>
+
+<!-- 1. DATI -->
+<div class="acc open filled" id="acc1">
+  <div class="acc-head" onclick="toggle('acc1')">
+    <span class="acc-num">1</span>
+    <span class="acc-title">Carica dati</span>
+    <span class="acc-tag" id="tag1">—</span>
+    <span class="acc-chev">▼</span>
+  </div>
+  <div class="acc-body">
+    <div class="file-drop" id="fileDrop">
+      <input type="file" id="fileInput" accept=".xlsx,.xls,.csv" onchange="handleFile(this.files[0])">
+      <div class="fd-icon">📂</div>
+      <div class="fd-label"><strong>Clicca o trascina</strong> il file</div>
+      <div class="fd-meta">Excel (.xlsx, .xls) · CSV</div>
+    </div>
+    <div class="file-ok" id="fileOk">
+      <div class="file-ok-name" id="fileOkName">—</div>
+      <div class="file-ok-meta" id="fileOkMeta">—</div>
+    </div>
+    <div class="col-sel" id="colSel">
+      <div class="fgroup">
+        <label class="flabel">Colonna province / territori</label>
+        <select id="selProv" onchange="recheckData()"></select>
+      </div>
+      <div class="fgroup">
+        <label class="flabel">Colonna valore principale</label>
+        <select id="selVal" onchange="recheckData()"></select>
+      </div>
+      <div class="fgroup" id="col2Wrap" style="display:none;">
+        <label class="flabel">Colonna valore 2 <span>(confronto)</span></label>
+        <select id="selVal2"></select>
+      </div>
+      <div class="val-panel" id="valPanel"></div>
+    </div>
+  </div>
+</div>
+
+<!-- 2. TERRITORIO -->
+<div class="acc" id="acc2">
+  <div class="acc-head" onclick="toggle('acc2')">
+    <span class="acc-num">2</span>
+    <span class="acc-title">Territorio</span>
+    <span class="acc-tag" id="tag2">Province</span>
+    <span class="acc-chev">▼</span>
+  </div>
+  <div class="acc-body">
+    <div class="rgroup" id="rg-territory">
+      <label class="ritem sel" onclick="selR(this,'territory','province')"><input type="radio" name="territory" value="province" checked><span class="rdot"></span><div><div class="rtext">🗾 Province italiane (107)</div></div></label>
+      <label class="ritem" onclick="selR(this,'territory','regioni')"><input type="radio" name="territory" value="regioni"><span class="rdot"></span><div><div class="rtext">🏛 Regioni italiane (20)</div></div></label>
+      <label class="ritem" onclick="selR(this,'territory','europa')"><input type="radio" name="territory" value="europa"><span class="rdot"></span><div><div class="rtext">🌍 Europa — nazioni</div></div></label>
+    </div>
+  </div>
+</div>
+
+<!-- 3. VISUALIZZAZIONE -->
+<div class="acc" id="acc3">
+  <div class="acc-head" onclick="toggle('acc3')">
+    <span class="acc-num">3</span>
+    <span class="acc-title">Visualizzazione</span>
+    <span class="acc-tag" id="tag3">Coropletica</span>
+    <span class="acc-chev">▼</span>
+  </div>
+  <div class="acc-body fstack">
+    <div>
+      <label class="flabel">Tipo mappa</label>
+      <div class="rgroup">
+        <label class="ritem sel" onclick="selR(this,'vizType','coropletica')"><input type="radio" name="vizType" value="coropletica" checked><span class="rdot"></span><div><div class="rtext">🎨 Coropletica</div><div class="rdesc">Gradiente continuo di colore</div></div></label>
+        <label class="ritem" onclick="selR(this,'vizType','step')"><input type="radio" name="vizType" value="step"><span class="rdot"></span><div><div class="rtext">📊 A fasce / step</div><div class="rdesc">Colori discreti divisi in N range (es. basso/medio/alto)</div></div></label>
+        <label class="ritem" onclick="selR(this,'vizType','bolle')"><input type="radio" name="vizType" value="bolle"><span class="rdot"></span><div><div class="rtext">🔵 Bolle proporzionali</div><div class="rdesc">Cerchi sovrapposti — dimensione = valore</div></div></label>
+        <label class="ritem" onclick="selR(this,'vizType','dashboard')"><input type="radio" name="vizType" value="dashboard"><span class="rdot"></span><div><div class="rtext">📋 Dashboard completa</div><div class="rdesc">Mappa + grafici + classifica affiancati</div></div></label>
+      </div>
+    </div>
+
+    <!-- Opzioni contestuali STEP -->
+    <div id="step-opts" style="display:none;" class="fstack">
+      <div>
+        <label class="flabel">Numero di fasce</label>
+        <input type="number" id="stepN" value="5" min="2" max="10">
+        <p class="hint">Es. 5 fasce = basso / medio-basso / medio / medio-alto / alto</p>
+      </div>
+      <div>
+        <label class="flabel">Soglie</label>
+        <div class="rgroup" id="rg-stepmode">
+          <label class="ritem sel" onclick="selR(this,'stepMode','auto')"><input type="radio" name="stepMode" value="auto" checked><span class="rdot"></span><div><div class="rtext">Automatiche (quantili)</div><div class="rdesc">Divide i dati in gruppi di ugual numerosità</div></div></label>
+          <label class="ritem" onclick="selR(this,'stepMode','equal')"><input type="radio" name="stepMode" value="equal"><span class="rdot"></span><div><div class="rtext">Intervalli uguali</div><div class="rdesc">Divide l'intervallo min–max in parti uguali</div></div></label>
+          <label class="ritem" onclick="selR(this,'stepMode','manual')"><input type="radio" name="stepMode" value="manual"><span class="rdot"></span><div><div class="rtext">Soglie manuali</div><div class="rdesc">Scrivi i valori di separazione</div></div></label>
+        </div>
+      </div>
+      <div id="step-manual-wrap" style="display:none;">
+        <label class="flabel">Valori soglia <span>(separati da virgola)</span></label>
+        <input type="text" id="stepManual" placeholder="es. 500, 1000, 2000, 5000">
+        <p class="hint">Definiscono i confini tra le fasce. Per 5 fasce servono 4 soglie.</p>
+      </div>
+      <div>
+        <label class="flabel">Etichette fasce <span>(opzionale)</span></label>
+        <input type="text" id="stepLabels" placeholder="es. Basso, Medio-basso, Medio, Alto, Molto alto">
+        <p class="hint">Separate da virgola. Se vuote usa i valori numerici.</p>
+      </div>
+    </div>
+
+    <!-- Opzioni contestuali BOLLE -->
+    <div id="bolle-opts" style="display:none;" class="fstack">
+      <div>
+        <label class="flabel">Dimensione massima bolla <span>(px)</span></label>
+        <input type="number" id="bolleMaxR" value="40" min="10" max="120">
+        <p class="hint">Raggio in pixel della bolla col valore più alto.</p>
+      </div>
+      <div>
+        <label class="flabel">Colore bolle</label>
+        <div class="rgroup" id="rg-bollecolor">
+          <label class="ritem sel" onclick="selR(this,'bolleColor','palette')"><input type="radio" name="bolleColor" value="palette" checked><span class="rdot"></span><div class="rtext">Da palette (gradiente per valore)</div></label>
+          <label class="ritem" onclick="selR(this,'bolleColor','fisso')"><input type="radio" name="bolleColor" value="fisso"><span class="rdot"></span><div class="rtext">Colore unico personalizzato</div></label>
+        </div>
+        <input type="text" id="bolleColorFisso" placeholder="#3b5bdb" style="margin-top:6px;display:none;">
+      </div>
+      <div>
+        <label class="flabel">Opacità bolle <span>(0–1)</span></label>
+        <input type="number" id="bolleOpacity" value="0.7" min="0.1" max="1" step="0.05">
+      </div>
+      <div>
+        <label class="flabel">Sfondo mappa con bolle</label>
+        <div class="rgroup" id="rg-bollebg">
+          <label class="ritem sel" onclick="selR(this,'bolleBg','grigio')"><input type="radio" name="bolleBg" value="grigio" checked><span class="rdot"></span><div class="rtext">Grigio neutro (consigliato)</div></label>
+          <label class="ritem" onclick="selR(this,'bolleBg','coropletica')"><input type="radio" name="bolleBg" value="coropletica"><span class="rdot"></span><div class="rtext">Coropletica sottostante</div></label>
+          <label class="ritem" onclick="selR(this,'bolleBg','bianco')"><input type="radio" name="bolleBg" value="bianco"><span class="rdot"></span><div class="rtext">Bianco</div></label>
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <label class="flabel">Scala valori</label>
+      <div class="rgroup">
+        <label class="ritem" id="radio-log" onclick="selR(this,'scala','logaritmica')"><input type="radio" name="scala" value="logaritmica"><span class="rdot"></span><div><div class="rtext">Logaritmica</div><div class="rdesc">Consigliata quando i valori variano molto</div></div></label>
+        <label class="ritem sel" onclick="selR(this,'scala','lineare')"><input type="radio" name="scala" value="lineare" checked><span class="rdot"></span><div><div class="rtext">Lineare</div></div></label>
+        <label class="ritem" onclick="selR(this,'scala','quantili')"><input type="radio" name="scala" value="quantili"><span class="rdot"></span><div><div class="rtext">Quantili</div><div class="rdesc">Divide in N gruppi uguali</div></div></label>
+      </div>
+    </div>
+    <div id="quantile-n-wrap" style="display:none;">
+      <label class="flabel">Numero di fasce quantili</label>
+      <input type="number" id="quantileN" value="5" min="2" max="10">
+    </div>
+    <div>
+      <label class="flabel">Confronto due colonne <span>(richiede colonna 2)</span></label>
+      <div class="cgroup">
+        <label class="citem" onclick="toggleCheck(this,'compare')"><span class="cbox">✓</span><span class="rtext">Abilita switch dati nella mappa</span></label>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 4. COLORI & TEMA -->
+<div class="acc" id="acc4">
+  <div class="acc-head" onclick="toggle('acc4')">
+    <span class="acc-num">4</span>
+    <span class="acc-title">Colori &amp; Tema</span>
+    <span class="acc-tag" id="tag4">Blu</span>
+    <span class="acc-chev">▼</span>
+  </div>
+  <div class="acc-body fstack">
+    <div>
+      <label class="flabel">Palette colori</label>
+      <div class="palette-grid" id="pal-grid">
+        <div class="pal-item sel" onclick="selPal(this,'bianco-blu')"><div class="pal-bar" style="background:linear-gradient(to right,#f0f8ff,#083d7f)"></div><div class="pal-name">Bianco → Blu</div></div>
+        <div class="pal-item" onclick="selPal(this,'bianco-verde')"><div class="pal-bar" style="background:linear-gradient(to right,#f0fff4,#1a5c2a)"></div><div class="pal-name">Bianco → Verde</div></div>
+        <div class="pal-item" onclick="selPal(this,'bianco-rosso')"><div class="pal-bar" style="background:linear-gradient(to right,#fff5f5,#8b0000)"></div><div class="pal-name">Bianco → Rosso</div></div>
+        <div class="pal-item" onclick="selPal(this,'semaforo')"><div class="pal-bar" style="background:linear-gradient(to right,#1a9641,#ffffbf,#d7191c)"></div><div class="pal-name">Semaforo</div></div>
+        <div class="pal-item" onclick="selPal(this,'calore')"><div class="pal-bar" style="background:linear-gradient(to right,#ffffb2,#fd8d3c,#bd0026)"></div><div class="pal-name">Calore</div></div>
+        <div class="pal-item" onclick="selPal(this,'viola-oro')"><div class="pal-bar" style="background:linear-gradient(to right,#f3e8ff,#4c1d95)"></div><div class="pal-name">Bianco → Viola</div></div>
+        <div class="pal-item" onclick="selPal(this,'oceano')"><div class="pal-bar" style="background:linear-gradient(to right,#e0f7fa,#006064)"></div><div class="pal-name">Oceano</div></div>
+        <div class="pal-item" onclick="selPal(this,'personalizzata')"><div class="pal-bar" id="pal-custom-bar" style="background:linear-gradient(to right,#ffffff,#333333)"></div><div class="pal-name">✏️ Personalizzata</div></div>
+      </div>
+      <div class="custom-colors" id="custom-colors">
+        <div class="col-pick-wrap"><div class="col-pick-label">Inizio</div><div class="col-swatch"><input type="color" id="colStart" value="#ffffff" oninput="updateCustomPal()"></div></div>
+        <div class="col-pick-wrap"><div class="col-pick-label">Fine</div><div class="col-swatch"><input type="color" id="colEnd" value="#333333" oninput="updateCustomPal()"></div></div>
+        <div class="pal-preview" id="pal-preview-bar"></div>
+      </div>
+    </div>
+    <div>
+      <label class="flabel">Colore bordi province</label>
+      <div class="frow">
+        <div class="fgroup">
+          <label class="flabel">Colore <span>(hex)</span></label>
+          <input type="text" id="borderColor" value="#ffffff" placeholder="#ffffff">
+        </div>
+        <div class="fgroup">
+          <label class="flabel">Spessore <span>(px)</span></label>
+          <input type="number" id="borderWidth" value="0.5" min="0" max="4" step="0.25">
+        </div>
+      </div>
+    </div>
+    <div>
+      <label class="flabel">Colore sfondo mappa</label>
+      <div class="frow">
+        <div class="rgroup horizontal" id="rg-mapbg" style="gap:5px;">
+          <label class="ritem sel" onclick="selR(this,'mapBg','trasparente')" style="flex:1;"><input type="radio" name="mapBg" value="trasparente" checked><span class="rdot"></span><div class="rtext">Trasparente</div></label>
+          <label class="ritem" onclick="selR(this,'mapBg','bianco')" style="flex:1;"><input type="radio" name="mapBg" value="bianco"><span class="rdot"></span><div class="rtext">Bianco</div></label>
+          <label class="ritem" onclick="selR(this,'mapBg','grigio')" style="flex:1;"><input type="radio" name="mapBg" value="grigio"><span class="rdot"></span><div class="rtext">Grigio</div></label>
+          <label class="ritem" onclick="selR(this,'mapBg','custom-bg')" style="flex:1;"><input type="radio" name="mapBg" value="custom-bg"><span class="rdot"></span><div class="rtext">Custom</div></label>
+        </div>
+      </div>
+      <input type="text" id="mapBgCustom" placeholder="#e8edf5" style="margin-top:5px;display:none;">
+    </div>
+    <div>
+      <label class="flabel">Tema pagina</label>
+      <div class="rgroup" id="rg-tema">
+        <label class="ritem sel" onclick="selR(this,'tema','chiaro')"><input type="radio" name="tema" value="chiaro" checked><span class="rdot"></span><div class="rtext">☀️ Chiaro</div></label>
+        <label class="ritem" onclick="selR(this,'tema','scuro')"><input type="radio" name="tema" value="scuro"><span class="rdot"></span><div class="rtext">🌙 Scuro</div></label>
+        <label class="ritem" onclick="selR(this,'tema','corporate')"><input type="radio" name="tema" value="corporate"><span class="rdot"></span><div class="rtext">🏢 Corporate</div></label>
+        <label class="ritem" onclick="selR(this,'tema','editoriale')"><input type="radio" name="tema" value="editoriale"><span class="rdot"></span><div class="rtext">📰 Editoriale</div></label>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 5. ETICHETTE -->
+<div class="acc" id="acc5">
+  <div class="acc-head" onclick="toggle('acc5')">
+    <span class="acc-num">5</span>
+    <span class="acc-title">Etichette</span>
+    <span class="acc-tag" id="tag5">Valore</span>
+    <span class="acc-chev">▼</span>
+  </div>
+  <div class="acc-body fstack">
+    <div>
+      <label class="flabel">Contenuto etichetta</label>
+      <div class="cgroup">
+        <label class="citem sel" onclick="toggleCheck(this,'lbl_val')"><span class="cbox">✓</span><span class="rtext">Valore numerico</span></label>
+        <label class="citem" onclick="toggleCheck(this,'lbl_nome')"><span class="cbox">✓</span><span class="rtext">Nome del territorio</span></label>
+      </div>
+    </div>
+    <div>
+      <label class="flabel">Posizione etichetta</label>
+      <div class="rgroup" id="rg-lblpos">
+        <label class="ritem sel" onclick="selR(this,'lblPos','centro')"><input type="radio" name="lblPos" value="centro" checked><span class="rdot"></span><div><div class="rtext">Centro area</div></div></label>
+        <label class="ritem" onclick="selR(this,'lblPos','leader')"><input type="radio" name="lblPos" value="leader"><span class="rdot"></span><div><div class="rtext">Leader line automatica</div><div class="rdesc">Se non entra, esce fuori con freccia</div></div></label>
+      </div>
+    </div>
+    <div>
+      <label class="flabel">Dimensione testo etichetta</label>
+      <div class="rgroup" id="rg-lblsize">
+        <label class="ritem sel" onclick="selR(this,'lblSize','auto')"><input type="radio" name="lblSize" value="auto" checked><span class="rdot"></span><div class="rtext">Automatica (adatta a ogni area)</div></label>
+        <label class="ritem" onclick="selR(this,'lblSize','small')"><input type="radio" name="lblSize" value="small"><span class="rdot"></span><div class="rtext">Piccola (6px)</div></label>
+        <label class="ritem" onclick="selR(this,'lblSize','medium')"><input type="radio" name="lblSize" value="medium"><span class="rdot"></span><div class="rtext">Media (8px)</div></label>
+        <label class="ritem" onclick="selR(this,'lblSize','large')"><input type="radio" name="lblSize" value="large"><span class="rdot"></span><div class="rtext">Grande (10px)</div></label>
+        <label class="ritem" onclick="selR(this,'lblSize','custom-lbl')"><input type="radio" name="lblSize" value="custom-lbl"><span class="rdot"></span><div class="rtext">✏️ Personalizzata</div></label>
+      </div>
+      <input type="number" id="lblSizeCustom" placeholder="es. 9" min="4" max="20" style="margin-top:5px;display:none;">
+    </div>
+    <div>
+      <label class="flabel">Colore testo</label>
+      <div class="rgroup" id="rg-lblcol">
+        <label class="ritem sel" onclick="selR(this,'lblColor','auto')"><input type="radio" name="lblColor" value="auto" checked><span class="rdot"></span><div class="rtext">Automatico (bianco/nero in base al bg)</div></label>
+        <label class="ritem" onclick="selR(this,'lblColor','white')"><input type="radio" name="lblColor" value="white"><span class="rdot"></span><div class="rtext">Sempre bianco</div></label>
+        <label class="ritem" onclick="selR(this,'lblColor','dark')"><input type="radio" name="lblColor" value="dark"><span class="rdot"></span><div class="rtext">Sempre scuro</div></label>
+        <label class="ritem" onclick="selR(this,'lblColor','custom-col')"><input type="radio" name="lblColor" value="custom-col"><span class="rdot"></span><div class="rtext">✏️ Personalizzato</div></label>
+      </div>
+      <input type="text" id="lblColorCustom" placeholder="#333333" style="margin-top:5px;display:none;">
+    </div>
+    <div>
+      <label class="flabel">Stile testo</label>
+      <div class="cgroup">
+        <label class="citem sel" onclick="toggleCheck(this,'lbl_bold')"><span class="cbox">✓</span><span class="rtext">Grassetto</span></label>
+        <label class="citem" onclick="toggleCheck(this,'lbl_shadow')"><span class="cbox">✓</span><span class="rtext">Ombra / alone (leggibilità)</span></label>
+        <label class="citem" onclick="toggleCheck(this,'lbl_upper')"><span class="cbox">✓</span><span class="rtext">Maiuscolo</span></label>
+        <label class="citem" onclick="toggleCheck(this,'lbl_bg')"><span class="cbox">✓</span><span class="rtext">Sfondo semi-trasparente</span></label>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 6. FORMATO NUMERI -->
+<div class="acc" id="acc6">
+  <div class="acc-head" onclick="toggle('acc6')">
+    <span class="acc-num">6</span>
+    <span class="acc-title">Formato numeri</span>
+    <span class="acc-tag" id="tag6">Intero</span>
+    <span class="acc-chev">▼</span>
+  </div>
+  <div class="acc-body fstack">
+    <div>
+      <label class="flabel">Unità di misura uniforme</label>
+      <div class="rgroup" id="rg-numfmt">
+        <label class="ritem sel" onclick="selR(this,'numFmt','intero')"><input type="radio" name="numFmt" value="intero" checked><span class="rdot"></span><div><div class="rtext">Intero con separatore</div><div class="rdesc">es. 32.621 · 984 · 37</div></div></label>
+        <label class="ritem" onclick="selR(this,'numFmt','k')"><input type="radio" name="numFmt" value="k"><span class="rdot"></span><div><div class="rtext">Migliaia (k) — uniforme</div><div class="rdesc">es. 32,6k · 0,9k · 0,0k</div></div></label>
+        <label class="ritem" onclick="selR(this,'numFmt','k-smart')"><input type="radio" name="numFmt" value="k-smart"><span class="rdot"></span><div><div class="rtext">k solo se ≥ 1000</div><div class="rdesc">es. 32,6k · 984 · 37</div></div></label>
+        <label class="ritem" onclick="selR(this,'numFmt','M')"><input type="radio" name="numFmt" value="M"><span class="rdot"></span><div><div class="rtext">Milioni (M)</div><div class="rdesc">es. 0,03M · 1,2M</div></div></label>
+        <label class="ritem" onclick="selR(this,'numFmt','pct')"><input type="radio" name="numFmt" value="pct"><span class="rdot"></span><div><div class="rtext">Percentuale (%)</div></div></label>
+        <label class="ritem" onclick="selR(this,'numFmt','custom-fmt')"><input type="radio" name="numFmt" value="custom-fmt"><span class="rdot"></span><div class="rtext">✏️ Personalizzato</div></label>
+      </div>
+    </div>
+    <div>
+      <label class="flabel">Decimali <span>(0–3)</span></label>
+      <input type="number" id="numDecimals" value="1" min="0" max="3">
+    </div>
+    <div class="frow">
+      <div class="fgroup">
+        <label class="flabel">Prefisso <span>(es. €)</span></label>
+        <input type="text" id="numPrefix" placeholder="opzionale">
+      </div>
+      <div class="fgroup">
+        <label class="flabel">Suffisso <span>(es. %)</span></label>
+        <input type="text" id="numSuffix" placeholder="opzionale">
+      </div>
+    </div>
+    <div id="custom-fmt-wrap" style="display:none;">
+      <label class="flabel">Formula personalizzata</label>
+      <input type="text" id="customFmtExpr" placeholder="es. v/1000000 + 'M'">
+      <p class="hint">Usa <code>v</code> come variabile del valore numerico</p>
+    </div>
+  </div>
+</div>
+
+<!-- 7. EVIDENZIAZIONE GRUPPI -->
+<div class="acc" id="acc7">
+  <div class="acc-head" onclick="toggle('acc7')">
+    <span class="acc-num">7</span>
+    <span class="acc-title">Evidenziazione gruppi</span>
+    <span class="acc-tag" id="tag7">Nessuna</span>
+    <span class="acc-chev">▼</span>
+  </div>
+  <div class="acc-body fstack">
+    <p class="hint info">Sottolinea visivamente gruppi di province (top, bottom, medi). Puoi aggiungere più gruppi con stili diversi.</p>
+    <div id="hl-list"></div>
+    <button class="add-hl-btn" onclick="addHighlight()">+ Aggiungi gruppo</button>
+  </div>
+</div>
+
+<!-- 8. INTERATTIVITÀ -->
+<div class="acc" id="acc8">
+  <div class="acc-head" onclick="toggle('acc8')">
+    <span class="acc-num">8</span>
+    <span class="acc-title">Interattività</span>
+    <span class="acc-tag" id="tag8">Tooltip</span>
+    <span class="acc-chev">▼</span>
+  </div>
+  <div class="acc-body fstack">
+    <div class="cgroup">
+      <label class="citem sel" onclick="toggleCheck(this,'tooltip')"><span class="cbox">✓</span><span class="rtext">Tooltip al passaggio del mouse</span></label>
+      <label class="citem sel" onclick="toggleCheck(this,'click')"><span class="cbox">✓</span><span class="rtext">Click → pannello dettaglio</span></label>
+      <label class="citem sel" onclick="toggleCheck(this,'slider')"><span class="cbox">✓</span><span class="rtext">Slider filtro valori</span></label>
+      <label class="citem sel" onclick="toggleCheck(this,'zoom')"><span class="cbox">✓</span><span class="rtext">Zoom e pan con il mouse</span></label>
+      <label class="citem sel" onclick="toggleCheck(this,'search')"><span class="cbox">✓</span><span class="rtext">Ricerca provincia</span></label>
+      <label class="citem sel" onclick="toggleCheck(this,'exportpng')"><span class="cbox">✓</span><span class="rtext">Pulsante Esporta PNG</span></label>
+      <label class="citem" onclick="toggleCheck(this,'animation')"><span class="cbox">✓</span><span class="rtext">Animazione caricamento province</span></label>
+    </div>
+  </div>
+</div>
+
+<!-- 9. FONT & TITOLO -->
+<div class="acc" id="acc9">
+  <div class="acc-head" onclick="toggle('acc9')">
+    <span class="acc-num">9</span>
+    <span class="acc-title">Font, Titolo &amp; Metadati</span>
+    <span class="acc-tag" id="tag9">—</span>
+    <span class="acc-chev">▼</span>
+  </div>
+  <div class="acc-body fstack">
+    <div>
+      <label class="flabel">Font <span>(nome Google Fonts o sistema)</span></label>
+      <div class="rgroup" id="rg-font">
+        <label class="ritem sel" onclick="selR(this,'fontChoice','Inter')"><input type="radio" name="fontChoice" value="Inter" checked><span class="rdot"></span><div class="rtext">Inter — moderno, dashboard</div></label>
+        <label class="ritem" onclick="selR(this,'fontChoice','Montserrat')"><input type="radio" name="fontChoice" value="Montserrat"><span class="rdot"></span><div class="rtext">Montserrat — elegante, titoli</div></label>
+        <label class="ritem" onclick="selR(this,'fontChoice','Roboto')"><input type="radio" name="fontChoice" value="Roboto"><span class="rdot"></span><div class="rtext">Roboto — tecnico, neutro</div></label>
+        <label class="ritem" onclick="selR(this,'fontChoice','Quattrocento Sans')"><input type="radio" name="fontChoice" value="Quattrocento Sans"><span class="rdot"></span><div class="rtext">Quattrocento Sans — editoriale</div></label>
+        <label class="ritem" onclick="selR(this,'fontChoice','DM Sans')"><input type="radio" name="fontChoice" value="DM Sans"><span class="rdot"></span><div class="rtext">DM Sans — contemporaneo</div></label>
+        <label class="ritem" onclick="selR(this,'fontChoice','custom-font')"><input type="radio" name="fontChoice" value="custom-font"><span class="rdot"></span><div class="rtext">✏️ Scrivi il nome font</div></label>
+      </div>
+      <input type="text" id="fontCustom" placeholder="es. Lato, Nunito, Playfair Display…" style="margin-top:5px;display:none;">
+    </div>
+    <div>
+      <label class="flabel">Titolo mappa</label>
+      <input type="text" id="mapTitle" placeholder="es. Sinistri per Provincia 2024" oninput="updateTag9()">
+    </div>
+    <div>
+      <label class="flabel">Sottotitolo <span>(opzionale)</span></label>
+      <input type="text" id="mapSubtitle" placeholder="es. Dati IVASS · Tutti i comparti">
+    </div>
+    <div>
+      <label class="flabel">Fonte dati <span>(opzionale)</span></label>
+      <input type="text" id="mapSource" placeholder="es. Elaborazione su dati ISTAT 2024">
+    </div>
+  </div>
+</div>
+
+</div><!-- /sidebar-body -->
+
+<!-- PROGRESS + GENERATE -->
+<div class="progress-wrap">
+  <div class="progress-track"><div class="progress-fill" id="progFill"></div></div>
+  <div class="progress-label" id="progLabel">0% completato</div>
+</div>
+<div class="sidebar-foot">
+  <button class="btn-gen" id="btnGen" onclick="generate()" disabled>
+    ⚡ Genera Mappa HTML
+  </button>
+</div>
+</aside>
+
+<!-- ════════════════════ MAIN ════════════════════ -->
+<div class="main">
+  <div class="main-toolbar">
+    <div class="main-tabs">
+      <button class="tab-btn active" onclick="switchTab('preview',this)">Anteprima</button>
+      <button class="tab-btn" onclick="switchTab('validation',this)">Validazione dati</button>
+      <button class="tab-btn" onclick="switchTab('config',this)">Riepilogo config</button>
+    </div>
+    <div class="main-actions">
+      <button class="btn btn-secondary btn-sm" id="btnPreview" onclick="previewMap()" disabled>👁 Aggiorna anteprima</button>
+      <button class="btn btn-primary btn-sm" id="btnDownload" onclick="downloadMap()" disabled>⬇ Scarica HTML</button>
+    </div>
+  </div>
+
+  <!-- TAB: PREVIEW -->
+  <div class="tab-content active" id="tab-preview">
+    <div class="empty" id="emptyState">
+      <div class="empty-icon">🗺️</div>
+      <div class="empty-title">La tua mappa apparirà qui</div>
+      <div class="empty-desc">Carica un file Excel, configura le opzioni e clicca <strong style="color:var(--accent)">Genera Mappa</strong> per vedere il risultato.</div>
+      <div class="empty-steps">
+        <div class="estep active"><span class="edot"></span>Carica Excel con province e valori</div>
+        <div class="estep"><span class="edot"></span>Scegli palette, scala, etichette</div>
+        <div class="estep"><span class="edot"></span>Configura formato numeri e interattività</div>
+        <div class="estep"><span class="edot"></span>Genera e scarica il file HTML</div>
+      </div>
+    </div>
+    <div class="result-wrap" id="resultWrap" style="display:none;">
+      <div class="result-header">
+        <div class="result-info">
+          <div class="result-title" id="resTit">—</div>
+          <div class="result-meta" id="resMeta">—</div>
+        </div>
+        <div class="result-btns">
+          <button class="btn btn-secondary btn-sm" onclick="previewMap()">↺ Ricarica</button>
+          <button class="btn btn-primary btn-sm" onclick="downloadMap()">⬇ Scarica</button>
+        </div>
+      </div>
+      <div class="preview-area" id="previewArea">
+        <iframe id="previewFrame" title="Anteprima mappa"></iframe>
+      </div>
+    </div>
+  </div>
+
+  <!-- TAB: VALIDATION -->
+  <div class="tab-content" id="tab-validation">
+    <div class="val-tab-wrap" id="valTabContent">
+      <div style="color:var(--text3);font-size:.82rem;padding:20px;">Carica un file per vedere la validazione dei dati.</div>
+    </div>
+  </div>
+
+  <!-- TAB: CONFIG -->
+  <div class="tab-content" id="tab-config">
+    <div class="config-grid" id="cfgGrid">
+      <div style="grid-column:1/-1;color:var(--text3);font-size:.82rem;padding:10px 0;">Genera una mappa per vedere il riepilogo della configurazione.</div>
+    </div>
+  </div>
+</div>
+
+</div><!-- /app -->
+
+<!-- OVERLAY -->
+<div class="overlay" id="overlay">
+  <div class="spin"></div>
+  <div class="overlay-text">Generazione in corso…</div>
+</div>
+
+<!-- TOAST -->
+<div class="toast" id="toast"></div>
+
+<!-- MODAL TEMPLATE SAVE -->
+<div class="modal-backdrop" id="modalTpl">
+  <div class="modal">
+    <div class="modal-title">💾 Salva template</div>
+    <label class="flabel">Nome template</label>
+    <input type="text" id="modalTplName" placeholder="es. Report Sinistri Blu">
+    <div class="modal-btns">
+      <button class="btn btn-ghost" onclick="closeModal()">Annulla</button>
+      <button class="btn btn-primary" onclick="confirmSaveTemplate()">Salva</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ══════════════════════════════════════════════════════════════
+//  STATE
+// ══════════════════════════════════════════════════════════════
+const S = {
+  data: null,
+  territory: 'province',
+  vizType: 'coropletica',
+  scala: 'lineare',
+  quantileN: 5,
+  compare: false,
+  // Step
+  stepN: 5, stepMode: 'auto', stepManual: '', stepLabels: '',
+  // Bolle
+  bolleMaxR: 40, bolleColor: 'palette', bolleColorFisso: '#3b5bdb',
+  bolleOpacity: 0.7, bolleBg: 'grigio',
+  palette: 'bianco-blu',
+  colStart: '#ffffff', colEnd: '#333333',
+  borderColor: '#ffffff', borderWidth: 0.5,
+  mapBg: 'trasparente', mapBgCustom: '#e8edf5',
+  tema: 'chiaro',
+  lblVal: true, lblNome: false,
+  lblPos: 'centro',
+  lblSize: 'auto', lblSizeCustom: 9,
+  lblColor: 'auto', lblColorCustom: '#333333',
+  lblBold: true, lblShadow: false, lblUpper: false, lblBg: false,
+  numFmt: 'intero', numDecimals: 1, numPrefix: '', numSuffix: '',
+  customFmtExpr: '',
+  highlights: [],
+  tooltip: true, click: true, slider: true, zoom: true,
+  search: true, exportpng: true, animation: false,
+  fontChoice: 'Inter', fontCustom: '',
+  title: '', subtitle: '', source: '',
+  generatedHTML: null,
+};
+const CHECKS = new Set(['lbl_val','tooltip','click','slider','zoom','search','exportpng']);
+// pre-fill set
+['lbl_bold'].forEach(k => CHECKS.add(k));
+
+// ── ACCORDION ──
+function toggle(id) {
+  const el = document.getElementById(id);
+  el.classList.toggle('open');
+}
+
+// ── RADIO ──
+function selR(el, key, val) {
+  const name = el.querySelector('input').name;
+  document.querySelectorAll(`[name="${name}"]`).forEach(r =>
+    r.closest('.ritem').classList.remove('sel'));
+  el.classList.add('sel');
+  el.querySelector('input').checked = true;
+  S[key] = val;
+  onStateChange(key, val);
+  updateProgress();
+}
+
+// ── CHECKBOX ──
+function toggleCheck(el, key) {
+  el.classList.toggle('sel');
+  const on = el.classList.contains('sel');
+  // map key → state field
+  const map = {
+    lbl_val:'lblVal', lbl_nome:'lblNome', lbl_bold:'lblBold',
+    lbl_shadow:'lblShadow', lbl_upper:'lblUpper', lbl_bg:'lblBg',
+    compare:'compare', tooltip:'tooltip', click:'click',
+    slider:'slider', zoom:'zoom', search:'search',
+    exportpng:'exportpng', animation:'animation',
+  };
+  if (map[key]) S[map[key]] = on;
+  if (key === 'compare') {
+    document.getElementById('col2Wrap').style.display = on ? 'block' : 'none';
+  }
+  updateProgress();
+}
+
+// ── PALETTE ──
+function selPal(el, val) {
+  document.querySelectorAll('.pal-item').forEach(p => p.classList.remove('sel'));
+  el.classList.add('sel');
+  S.palette = val;
+  document.getElementById('custom-colors').classList.toggle('show', val === 'personalizzata');
+  document.getElementById('tag4').textContent = el.querySelector('.pal-name').textContent.slice(0,12);
+  updateProgress();
+}
+function updateCustomPal() {
+  S.colStart = document.getElementById('colStart').value;
+  S.colEnd = document.getElementById('colEnd').value;
+  const bar = document.getElementById('pal-custom-bar');
+  const prev = document.getElementById('pal-preview-bar');
+  const g = `linear-gradient(to right,${S.colStart},${S.colEnd})`;
+  if (bar) bar.style.background = g;
+  if (prev) prev.style.background = g;
+}
+
+// ── STATE CHANGE REACTIONS ──
+function onStateChange(key, val) {
+  if (key === 'scala') {
+    document.getElementById('quantile-n-wrap').style.display = val === 'quantili' ? 'block' : 'none';
+    updateTag3();
+  }
+  if (key === 'vizType') {
+    // Mostra/nascondi opzioni contestuali
+    document.getElementById('step-opts').style.display  = val === 'step'  ? 'block' : 'none';
+    document.getElementById('bolle-opts').style.display = val === 'bolle' ? 'block' : 'none';
+    updateTag3();
+  }
+  if (key === 'stepMode') {
+    document.getElementById('step-manual-wrap').style.display = val === 'manual' ? 'block' : 'none';
+  }
+  if (key === 'bolleColor') {
+    document.getElementById('bolleColorFisso').style.display = val === 'fisso' ? 'block' : 'none';
+  }
+  if (key === 'territory') {
+    const m = {province:'Province', regioni:'Regioni', europa:'Europa'};
+    document.getElementById('tag2').textContent = m[val] || val;
+  }
+  if (key === 'tema') {
+    document.getElementById('tag4').textContent =
+      document.querySelector('.pal-item.sel .pal-name').textContent.slice(0,10);
+  }
+  if (key === 'numFmt') {
+    document.getElementById('tag6').textContent =
+      {intero:'Intero',k:'k',['k-smart']:'k-smart',M:'M',pct:'%',['custom-fmt']:'Custom'}[val] || val;
+    document.getElementById('custom-fmt-wrap').style.display =
+      val === 'custom-fmt' ? 'block' : 'none';
+  }
+  if (key === 'lblSize') {
+    document.getElementById('lblSizeCustom').style.display =
+      val === 'custom-lbl' ? 'block' : 'none';
+  }
+  if (key === 'lblColor') {
+    document.getElementById('lblColorCustom').style.display =
+      val === 'custom-col' ? 'block' : 'none';
+  }
+  if (key === 'mapBg') {
+    document.getElementById('mapBgCustom').style.display =
+      val === 'custom-bg' ? 'block' : 'none';
+  }
+  if (key === 'fontChoice') {
+    document.getElementById('fontCustom').style.display =
+      val === 'custom-font' ? 'block' : 'none';
+  }
+}
+
+function updateTag3() {
+  const labels = {
+    coropletica:'Coropletica', step:'A fasce', bolle:'Bolle', dashboard:'Dashboard'
+  };
+  document.getElementById('tag3').textContent =
+    `${labels[S.vizType] || S.vizType} · ${S.scala}`;
+}
+
+// ── TAG 9 ──
+function updateTag9() {
+  S.title = document.getElementById('mapTitle').value;
+  document.getElementById('tag9').textContent = S.title.slice(0,16) || '—';
+  updateProgress();
+}
+
+// ── TABS ──
+function switchTab(id, btn) {
+  document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('tab-'+id).classList.add('active');
+  btn.classList.add('active');
+}
+
+// ── PROGRESS ──
+function updateProgress() {
+  let score = 0;
+  if (S.data) score += 35;
+  if (S.title) score += 20;
+  if (S.palette) score += 15;
+  if (S.tema) score += 15;
+  if (S.numFmt) score += 15;
+  document.getElementById('progFill').style.width = score + '%';
+  document.getElementById('progLabel').textContent = score + '% completato';
+  const canGen = S.data !== null;
+  document.getElementById('btnGen').disabled = !canGen;
+  document.getElementById('btnPreview').disabled = !S.generatedHTML;
+  document.getElementById('btnDownload').disabled = !S.generatedHTML;
+}
+
+// ── TOAST ──
+function toast(msg, type='success') {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = `toast show ${type}`;
+  setTimeout(() => t.classList.remove('show'), 3500);
+}
+
+// ════════════════════════════════════════════════
+//  FILE HANDLING
+// ════════════════════════════════════════════════
+const drop = document.getElementById('fileDrop');
+drop.addEventListener('dragover', e => { e.preventDefault(); drop.classList.add('drag'); });
+drop.addEventListener('dragleave', () => drop.classList.remove('drag'));
+drop.addEventListener('drop', e => { e.preventDefault(); drop.classList.remove('drag'); handleFile(e.dataTransfer.files[0]); });
+
+function handleFile(file) {
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const wb = XLSX.read(e.target.result, {type:'array'});
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(ws, {header:1, defval:''});
+      if (rows.length < 2) { toast('File vuoto', 'error'); return; }
+      const headers = rows[0].map(String);
+      const dataRows = rows.slice(1).filter(r => r.some(c => c !== ''));
+      S._rawHeaders = headers;
+      S._rawRows = dataRows;
+
+      // Popola select
+      const sp = document.getElementById('selProv');
+      const sv = document.getElementById('selVal');
+      const sv2 = document.getElementById('selVal2');
+      [sp,sv,sv2].forEach(s => { s.innerHTML = headers.map((h,i) => `<option value="${i}">${h}</option>`).join(''); });
+
+      // Auto-detect
+      let ip=0, iv=1;
+      headers.forEach((h,i) => {
+        const l = h.toLowerCase();
+        if (l.includes('prov') || l.includes('territ') || l.includes('area') || l.includes('nome')) ip = i;
+        if (l.includes('val') || l.includes('dato') || l.includes('compart') || l.includes('totale') || l.includes('numero')) iv = i;
+      });
+      sp.value = ip; sv.value = iv;
+      // set val2 to next numeric col
+      const numerics = headers.map((h,i) => {
+        const vals = dataRows.map(r => parseFloat(String(r[i]).replace(',','.'))).filter(v => !isNaN(v));
+        return vals.length > dataRows.length * .5 ? i : null;
+      }).filter(v => v !== null && v !== iv);
+      if (numerics.length) sv2.value = numerics[0];
+
+      document.getElementById('fileOkName').textContent = '📄 ' + file.name;
+      document.getElementById('fileOkMeta').textContent = `${dataRows.length} righe · ${headers.length} colonne`;
+      document.getElementById('fileOk').classList.add('show');
+      document.getElementById('colSel').classList.add('show');
+
+      recheckData();
+    } catch(err) { toast('Errore lettura: ' + err.message, 'error'); }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function recheckData() {
+  if (!S._rawRows) return;
+  const ip = parseInt(document.getElementById('selProv').value);
+  const iv = parseInt(document.getElementById('selVal').value);
+  const EXCL = new Set(['altro','san marino','estero','nd','n/d','totale','italia']);
+  const provinces=[], values=[];
+  S._rawRows.forEach(r => {
+    const p = String(r[ip]||'').trim();
+    const v = parseFloat(String(r[iv]||'').replace(',','.'));
+    if (!p || EXCL.has(p.toLowerCase()) || isNaN(v)) return;
+    provinces.push(p.toUpperCase()); values.push(v);
+  });
+  S.data = {provinces, values};
+  const vmin = Math.min(...values), vmax = Math.max(...values);
+  const ratio = vmax / Math.max(1, vmin);
+  // Log suggestion
+  if (ratio > 50) {
+    document.getElementById('radio-log').querySelector('.rdesc').textContent = '⚠️ Consigliata — rapporto max/min ' + Math.round(ratio) + 'x';
+  }
+  buildValidation(provinces, values, ratio);
+  document.getElementById('acc1').classList.add('filled');
+  document.getElementById('tag1').textContent = provinces.length + ' territori';
+  updateProgress();
+}
+
+const SYNONYMS = {
+  "Forlì-Cesena":"FORLI' CESENA","Forlì Cesena":"FORLI' CESENA","FORLI'-CESENA":"FORLI' CESENA",
+  "Reggio nell'Emilia":"REGGIO EMILIA","Reggio Emilia":"REGGIO EMILIA",
+  "L'Aquila":"L'AQUILA","Ascoli Piceno":"ASCOLI PICENO",
+  "Pesaro e Urbino":"PESARO E URBINO","Pesaro-Urbino":"PESARO E URBINO",
+  "Monza e della Brianza":"MONZA BRIANZA","Monza e Brianza":"MONZA BRIANZA",
+  "Verbano-Cusio-Ossola":"VERBANIA","Verbano Cusio Ossola":"VERBANIA",
+  "Reggio Calabria":"REGGIO CALABRIA","Reggio di Calabria":"REGGIO CALABRIA",
+  "Massa-Carrara":"MASSA","Massa Carrara":"MASSA",
+  "Barletta-Andria-Trani":"BARLETTA-ANDRIA-TRANI",
+  "Sud Sardegna":"SUD SARDEGNA","Valle d'Aosta":"AOSTA",
+  "Bolzano/Bozen":"BOLZANO","La Spezia":"LA SPEZIA",
+};
+const KNOWN_PROVINCE = new Set(["TORINO","VERCELLI","NOVARA","CUNEO","ASTI","ALESSANDRIA","BIELLA","VERBANIA","AOSTA","IMPERIA","SAVONA","GENOVA","LA SPEZIA","VARESE","COMO","SONDRIO","MILANO","BERGAMO","BRESCIA","PAVIA","CREMONA","MANTOVA","LECCO","LODI","MONZA BRIANZA","BOLZANO","TRENTO","VERONA","VICENZA","BELLUNO","TREVISO","VENEZIA","PADOVA","ROVIGO","UDINE","GORIZIA","TRIESTE","PORDENONE","PIACENZA","PARMA","REGGIO EMILIA","MODENA","BOLOGNA","FERRARA","RAVENNA","FORLI' CESENA","RIMINI","MASSA","LUCCA","PISTOIA","FIRENZE","PRATO","LIVORNO","PISA","AREZZO","SIENA","GROSSETO","PERUGIA","TERNI","VITERBO","RIETI","ROMA","LATINA","FROSINONE","ANCONA","PESARO E URBINO","MACERATA","FERMO","ASCOLI PICENO","L'AQUILA","TERAMO","PESCARA","CHIETI","CAMPOBASSO","ISERNIA","CASERTA","BENEVENTO","NAPOLI","AVELLINO","SALERNO","FOGGIA","BARLETTA-ANDRIA-TRANI","BARI","TARANTO","BRINDISI","LECCE","POTENZA","MATERA","COSENZA","CROTONE","CATANZARO","VIBO VALENTIA","REGGIO CALABRIA","TRAPANI","PALERMO","MESSINA","AGRIGENTO","CALTANISSETTA","ENNA","CATANIA","RAGUSA","SIRACUSA","SASSARI","NUORO","CAGLIARI","ORISTANO","SUD SARDEGNA"]);
+
+function buildValidation(provinces, values, ratio) {
+  const unrecognized = provinces.filter(p => !KNOWN_PROVINCE.has(p) && !SYNONYMS[p]);
+  const vmin = Math.min(...values), vmax = Math.max(...values);
+
+  let html = `<div class="val-card">
+    <div class="val-card-head">📊 Analisi dati</div>
+    <div class="val-items">
+      <div class="val-item ok"><span>✅</span><span>${provinces.length} territori rilevati</span></div>
+      <div class="val-item ok"><span>✅</span><span>Valore min: <b>${vmin.toLocaleString('it-IT')}</b> — max: <b>${vmax.toLocaleString('it-IT')}</b></span></div>
+      ${ratio > 50 ? `<div class="val-item warn"><span>⚠️</span><span>Rapporto max/min = <b>${Math.round(ratio)}x</b> — consigliata scala logaritmica</span></div>` : '<div class="val-item ok"><span>✅</span><span>Scala lineare appropriata (rapporto '+Math.round(ratio)+'x)</span></div>'}
+    </div>
+  </div>`;
+
+  if (unrecognized.length) {
+    html += `<div class="val-card">
+      <div class="val-card-head" style="color:var(--yellow)">⚠️ Nomi non riconosciuti (${unrecognized.length})</div>
+      <div class="val-items">
+        ${unrecognized.map(n => `<div class="val-item warn"><span>⚠️</span><span><b>${n}</b> — potrebbe non essere visualizzato sulla mappa</span></div>`).join('')}
+      </div>
+    </div>`;
+  } else {
+    html += `<div class="val-card">
+      <div class="val-card-head" style="color:var(--green)">✅ Tutti i nomi riconosciuti</div>
+    </div>`;
+  }
+
+  document.getElementById('valTabContent').innerHTML = html;
+}
+
+// ════════════════════════════════════════════════
+//  HIGHLIGHT GROUPS
+// ════════════════════════════════════════════════
+let hlId = 0;
+function addHighlight() {
+  const id = ++hlId;
+  S.highlights.push({id, type:'top', n:10, color:'#FFD700', style:'border', label:''});
+  renderHighlights();
+  document.getElementById('tag7').textContent = S.highlights.length + ' gruppi';
+}
+function removeHighlight(id) {
+  S.highlights = S.highlights.filter(h => h.id !== id);
+  renderHighlights();
+  document.getElementById('tag7').textContent = S.highlights.length ? S.highlights.length + ' gruppi' : 'Nessuna';
+}
+function renderHighlights() {
+  const list = document.getElementById('hl-list');
+  list.innerHTML = S.highlights.map(h => `
+    <div class="hl-group" id="hlg-${h.id}">
+      <div class="hl-row">
+        <select style="flex:1;font-size:.75rem;" onchange="updateHL(${h.id},'type',this.value)">
+          <option value="top" ${h.type==='top'?'selected':''}>Top N (maggiori)</option>
+          <option value="bottom" ${h.type==='bottom'?'selected':''}>Bottom N (minori)</option>
+          <option value="middle" ${h.type==='middle'?'selected':''}>Medi (fascia centrale)</option>
+          <option value="above" ${h.type==='above'?'selected':''}>Sopra soglia</option>
+          <option value="below" ${h.type==='below'?'selected':''}>Sotto soglia</option>
+        </select>
+        <button class="hl-remove" onclick="removeHighlight(${h.id})">✕</button>
+      </div>
+      <div class="hl-row">
+        <input type="number" value="${h.n}" min="1" max="50" placeholder="N" style="width:60px;font-size:.75rem;" onchange="updateHL(${h.id},'n',+this.value)">
+        <select style="flex:1;font-size:.75rem;" onchange="updateHL(${h.id},'style',this.value)">
+          <option value="border" ${h.style==='border'?'selected':''}>Bordo colorato</option>
+          <option value="hatch" ${h.style==='hatch'?'selected':''}>Tratteggio</option>
+          <option value="pulse" ${h.style==='pulse'?'selected':''}>Pulsante (animato)</option>
+          <option value="bright" ${h.style==='bright'?'selected':''}>Luminosità aumentata</option>
+        </select>
+        <div class="col-swatch" style="width:30px;height:26px;flex-shrink:0;">
+          <input type="color" value="${h.color}" oninput="updateHL(${h.id},'color',this.value)">
+        </div>
+      </div>
+      <input type="text" value="${h.label}" placeholder="Etichetta gruppo (opzionale)" style="font-size:.74rem;" oninput="updateHL(${h.id},'label',this.value)">
+    </div>
+  `).join('');
+}
+function updateHL(id, key, val) {
+  const h = S.highlights.find(h => h.id === id);
+  if (h) h[key] = val;
+}
+
+// ════════════════════════════════════════════════
+//  TEMPLATES
+// ════════════════════════════════════════════════
+function loadTemplates() {
+  const raw = localStorage.getItem('geomap_templates');
+  return raw ? JSON.parse(raw) : [];
+}
+function saveTemplates(list) {
+  localStorage.setItem('geomap_templates', JSON.stringify(list));
+}
+function renderTemplateList() {
+  const list = loadTemplates();
+  const el = document.getElementById('tpl-list');
+  if (!list.length) {
+    el.innerHTML = '<div class="tpl-empty">Nessun template salvato</div>';
+    document.getElementById('tag-tpl').textContent = '0 template';
+    return;
+  }
+  el.innerHTML = list.map((t,i) => `
+    <div class="tpl-item" onclick="applyTemplate(${i})">
+      <div>
+        <div class="tpl-item-name">${t.name}</div>
+        <div class="tpl-item-meta">${t.territory} · ${t.palette} · ${new Date(t.savedAt).toLocaleDateString('it-IT')}</div>
+      </div>
+      <button class="tpl-del" onclick="event.stopPropagation();deleteTemplate(${i})">🗑</button>
+    </div>
+  `).join('');
+  document.getElementById('tag-tpl').textContent = list.length + ' salvati';
+}
+function saveTemplate() {
+  const name = document.getElementById('tpl-name').value.trim();
+  if (!name) { toast('Scrivi un nome per il template', 'error'); return; }
+  const list = loadTemplates();
+  const snap = {
+    name, savedAt: Date.now(),
+    territory: S.territory, vizType: S.vizType, scala: S.scala,
+    palette: S.palette, colStart: S.colStart, colEnd: S.colEnd,
+    borderColor: S.borderColor, borderWidth: S.borderWidth,
+    mapBg: S.mapBg, tema: S.tema,
+    lblVal: S.lblVal, lblNome: S.lblNome, lblPos: S.lblPos,
+    lblSize: S.lblSize, lblSizeCustom: S.lblSizeCustom,
+    lblColor: S.lblColor, lblColorCustom: S.lblColorCustom,
+    lblBold: S.lblBold, lblShadow: S.lblShadow, lblUpper: S.lblUpper, lblBg: S.lblBg,
+    numFmt: S.numFmt, numDecimals: S.numDecimals, numPrefix: S.numPrefix, numSuffix: S.numSuffix,
+    highlights: JSON.parse(JSON.stringify(S.highlights)),
+    tooltip: S.tooltip, click: S.click, slider: S.slider, zoom: S.zoom,
+    search: S.search, exportpng: S.exportpng, animation: S.animation,
+    fontChoice: S.fontChoice, fontCustom: S.fontCustom,
+    title: S.title, subtitle: S.subtitle, source: S.source,
+  };
+  list.push(snap);
+  saveTemplates(list);
+  renderTemplateList();
+  document.getElementById('tpl-name').value = '';
+  toast('✅ Template "' + name + '" salvato!');
+}
+function applyTemplate(i) {
+  const t = loadTemplates()[i];
+  if (!t) return;
+  Object.keys(t).forEach(k => { if (k !== 'name' && k !== 'savedAt') S[k] = t[k]; });
+  // Update UI
+  applyStateToUI();
+  toast('Template "' + t.name + '" applicato!');
+}
+function deleteTemplate(i) {
+  const list = loadTemplates();
+  list.splice(i, 1);
+  saveTemplates(list);
+  renderTemplateList();
+  toast('Template eliminato');
+}
+function applyStateToUI() {
+  // Radio groups
+  const radioMaps = {
+    territory: 'territory', vizType: 'vizType', scala: 'scala',
+    mapBg: 'mapBg', tema: 'tema', lblPos: 'lblPos', lblSize: 'lblSize',
+    lblColor: 'lblColor', numFmt: 'numFmt', fontChoice: 'fontChoice',
+  };
+  Object.entries(radioMaps).forEach(([sKey, rName]) => {
+    const target = document.querySelector(`[name="${rName}"][value="${S[sKey]}"]`);
+    if (target) {
+      document.querySelectorAll(`[name="${rName}"]`).forEach(r => r.closest('.ritem').classList.remove('sel'));
+      target.closest('.ritem').classList.add('sel');
+      target.checked = true;
+      onStateChange(sKey, S[sKey]);
+    }
+  });
+  // Checkboxes — reset then apply
+  const checkMap = [
+    ['lbl_val','lblVal'],['lbl_nome','lblNome'],['lbl_bold','lblBold'],
+    ['lbl_shadow','lblShadow'],['lbl_upper','lblUpper'],['lbl_bg','lblBg'],
+    ['tooltip','tooltip'],['click','click'],['slider','slider'],
+    ['zoom','zoom'],['search','search'],['exportpng','exportpng'],['animation','animation'],
+  ];
+  // Reset all citem sel state to false
+  document.querySelectorAll('.citem').forEach(c => c.classList.remove('sel'));
+  // This simplified reset won't perfectly restore all checks, apply via known handles
+  // Palette
+  document.querySelectorAll('.pal-item').forEach(p => p.classList.remove('sel'));
+  const palItems = document.querySelectorAll('.pal-item');
+  palItems.forEach(p => { if (p.dataset.palette === S.palette || p.querySelector('.pal-name')?.textContent.toLowerCase().includes(S.palette)) p.classList.add('sel'); });
+  // Title/font
+  if (S.title) document.getElementById('mapTitle').value = S.title;
+  if (S.subtitle) document.getElementById('mapSubtitle').value = S.subtitle;
+  if (S.source) document.getElementById('mapSource').value = S.source;
+  if (S.fontCustom) document.getElementById('fontCustom').value = S.fontCustom;
+  renderHighlights();
+  updateProgress();
+}
+function closeModal() {
+  document.getElementById('modalTpl').classList.remove('show');
+}
+function confirmSaveTemplate() { saveTemplate(); closeModal(); }
+
+// CONFIG JSON IMPORT/EXPORT
+function saveConfigJSON() {
+  const snap = Object.assign({}, S);
+  delete snap.data; delete snap.generatedHTML; delete snap._rawHeaders; delete snap._rawRows;
+  const blob = new Blob([JSON.stringify(snap, null, 2)], {type:'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'geomap-config.json';
+  a.click();
+  toast('💾 Configurazione esportata');
+}
+function loadConfigJSON() {
+  const input = document.createElement('input');
+  input.type = 'file'; input.accept = '.json';
+  input.onchange = e => {
+    const f = e.target.files[0];
+    const r = new FileReader();
+    r.onload = ev => {
+      try {
+        const cfg = JSON.parse(ev.target.result);
+        Object.keys(cfg).forEach(k => { S[k] = cfg[k]; });
+        applyStateToUI();
+        toast('📂 Configurazione caricata');
+      } catch(err) { toast('File JSON non valido', 'error'); }
+    };
+    r.readAsText(f);
+  };
+  input.click();
+}
+
+// ════════════════════════════════════════════════
+//  NUMBER FORMAT
+// ════════════════════════════════════════════════
+function buildFmtFn() {
+  const dec = parseInt(document.getElementById('numDecimals').value) || 1;
+  const pre = document.getElementById('numPrefix').value;
+  const suf = document.getElementById('numSuffix').value;
+  const fmt = S.numFmt;
+  const expr = document.getElementById('customFmtExpr').value;
+
+  // Returns a JS function source string to embed in output HTML
+  switch(fmt) {
+    case 'intero':
+      return `function fmt(v){if(v===null||v===undefined)return'N/D';return'${pre}'+v.toLocaleString('it-IT',{minimumFractionDigits:0,maximumFractionDigits:0})+'${suf}';}`;
+    case 'k':
+      return `function fmt(v){if(v===null||v===undefined)return'N/D';return'${pre}'+(v/1000).toLocaleString('it-IT',{minimumFractionDigits:${dec},maximumFractionDigits:${dec}})+'k${suf}';}`;
+    case 'k-smart':
+      return `function fmt(v){if(v===null||v===undefined)return'N/D';if(v>=1000)return'${pre}'+(v/1000).toLocaleString('it-IT',{minimumFractionDigits:${dec},maximumFractionDigits:${dec}})+'k${suf}';return'${pre}'+v.toLocaleString('it-IT',{minimumFractionDigits:0,maximumFractionDigits:0})+'${suf}';}`;
+    case 'M':
+      return `function fmt(v){if(v===null||v===undefined)return'N/D';return'${pre}'+(v/1000000).toLocaleString('it-IT',{minimumFractionDigits:${dec},maximumFractionDigits:${dec}})+'M${suf}';}`;
+    case 'pct':
+      return `function fmt(v){if(v===null||v===undefined)return'N/D';return'${pre}'+v.toLocaleString('it-IT',{minimumFractionDigits:${dec},maximumFractionDigits:${dec}})+'%${suf}';}`;
+    case 'custom-fmt':
+      return `function fmt(v){if(v===null||v===undefined)return'N/D';try{return String(${expr||'v'});}catch(e){return String(v);}}`;
+    default:
+      return `function fmt(v){if(v===null||v===undefined)return'N/D';return String(v);}`;
+  }
+}
+
+// ════════════════════════════════════════════════
+//  FONT RESOLVER
+// ════════════════════════════════════════════════
+function resolveFont() {
+  if (S.fontChoice === 'custom-font') return document.getElementById('fontCustom').value || 'Inter';
+  return S.fontChoice;
+}
+
+// ════════════════════════════════════════════════
+//  GENERATE
+// ════════════════════════════════════════════════
+function generate() {
+  if (!S.data) { toast('Carica prima un file', 'error'); return; }
+  document.getElementById('overlay').classList.add('show');
+  // Read remaining fields
+  S.title = document.getElementById('mapTitle').value;
+  S.subtitle = document.getElementById('mapSubtitle').value;
+  S.source = document.getElementById('mapSource').value;
+  S.borderColor = document.getElementById('borderColor').value;
+  S.borderWidth = parseFloat(document.getElementById('borderWidth').value) || 0.5;
+  S.mapBgCustom = document.getElementById('mapBgCustom').value;
+  S.quantileN = parseInt(document.getElementById('quantileN').value) || 5;
+  S.lblSizeCustom = parseInt(document.getElementById('lblSizeCustom').value) || 9;
+  S.lblColorCustom = document.getElementById('lblColorCustom').value;
+  S.numDecimals = parseInt(document.getElementById('numDecimals').value) || 1;
+  S.numPrefix = document.getElementById('numPrefix').value;
+  S.numSuffix = document.getElementById('numSuffix').value;
+  S.customFmtExpr = document.getElementById('customFmtExpr').value;
+  S.fontCustom = document.getElementById('fontCustom').value;
+  // Step
+  S.stepN = parseInt(document.getElementById('stepN').value) || 5;
+  S.stepManual = document.getElementById('stepManual').value;
+  S.stepLabels = document.getElementById('stepLabels').value;
+  // Bolle
+  S.bolleMaxR = parseInt(document.getElementById('bolleMaxR').value) || 40;
+  S.bolleColorFisso = document.getElementById('bolleColorFisso').value;
+  S.bolleOpacity = parseFloat(document.getElementById('bolleOpacity').value) || 0.7;
+
+  setTimeout(() => {
+    try {
+      S.generatedHTML = buildHTML();
+      document.getElementById('overlay').classList.remove('show');
+      showResult();
+      previewMap();
+      updateProgress();
+      toast('✅ Mappa generata!');
+    } catch(e) {
+      document.getElementById('overlay').classList.remove('show');
+      toast('Errore: ' + e.message, 'error');
+      console.error(e);
+    }
+  }, 200);
+}
+
+function showResult() {
+  const title = S.title || 'Mappa Province Italiane';
+  document.getElementById('emptyState').style.display = 'none';
+  document.getElementById('resultWrap').style.display = 'flex';
+  document.getElementById('resTit').textContent = title;
+  document.getElementById('resMeta').textContent =
+    `${S.data.provinces.length} territori · ${S.vizType} · ${S.scala} · ${S.palette} · ${resolveFont()}`;
+  document.getElementById('btnPreview').disabled = false;
+  document.getElementById('btnDownload').disabled = false;
+  // Config grid
+  const cfgs = [
+    ['Territorio', S.territory], ['Visualizzazione', S.vizType],
+    ['Scala', S.scala], ['Palette', S.palette], ['Tema', S.tema],
+    ['Formato numeri', S.numFmt], ['Font', resolveFont()],
+    ['Etichette', [S.lblVal?'Valore':'',S.lblNome?'Nome':''].filter(Boolean).join('+') || 'Nessuna'],
+    ['Posizione etichette', S.lblPos], ['Interattività',
+      [S.tooltip?'Tooltip':'',S.zoom?'Zoom':'',S.search?'Cerca':'',S.exportpng?'PNG':''].filter(Boolean).join(' · ')],
+    ['Gruppi evidenziati', S.highlights.length || 'Nessuno'],
+    ['Dati', S.data.provinces.length + ' province'],
+  ];
+  document.getElementById('cfgGrid').innerHTML = cfgs.map(([l,v]) =>
+    `<div class="cfg"><div class="cfg-l">${l}</div><div class="cfg-v">${v}</div></div>`
+  ).join('');
+}
+
+function previewMap() {
+  if (!S.generatedHTML) return;
+  const blob = new Blob([S.generatedHTML], {type:'text/html'});
+  document.getElementById('previewFrame').src = URL.createObjectURL(blob);
+  document.getElementById('previewFrame').style.display = 'block';
+}
+
+function downloadMap() {
+  if (!S.generatedHTML) return;
+  const name = (S.title || 'mappa').replace(/[^a-z0-9]/gi,'_').toLowerCase();
+  const blob = new Blob([S.generatedHTML], {type:'text/html'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = name + '.html';
+  a.click();
+  toast('⬇ Download avviato!');
+}
+
+// ════════════════════════════════════════════════
+//  HTML BUILDER
+// ════════════════════════════════════════════════
+function buildHTML() {
+  const {provinces, values} = S.data;
+  const title = S.title || 'Mappa';
+  const font = resolveFont();
+
+  const DATA_OBJ = {};
+  provinces.forEach((p,i) => { DATA_OBJ[p] = values[i]; });
+
+  // FIX 2: seconda colonna per compare
+  let DATA_OBJ2 = null;
+  let col2Label = '';
+  if (S.compare && S._rawRows) {
+    const iv2 = parseInt(document.getElementById('selVal2').value);
+    const ip  = parseInt(document.getElementById('selProv').value);
+    const iv  = parseInt(document.getElementById('selVal').value);
+    col2Label = S._rawHeaders[iv2] || 'Valore 2';
+    const col1Label = S._rawHeaders[iv] || 'Valore 1';
+    if (iv2 !== iv) {
+      DATA_OBJ2 = {};
+      S._rawRows.forEach(r => {
+        const p = String(r[ip]||'').trim().toUpperCase();
+        const v = parseFloat(String(r[iv2]||'').replace(',','.'));
+        if (p && !isNaN(v)) DATA_OBJ2[p] = v;
+      });
+    }
+  }
+
+  // Font import
+  const GOOGLE_FONTS = ['Inter','Montserrat','Roboto','Quattrocento Sans','DM Sans','Lato','Nunito','Oswald','Playfair Display','Source Sans Pro'];
+  let fontImport = '';
+  const fontSlug = font.replace(/ /g, '+');
+  if (GOOGLE_FONTS.includes(font) || !['Arial','Helvetica','Georgia','serif','sans-serif','monospace'].includes(font)) {
+    fontImport = `<link href="https://fonts.googleapis.com/css2?family=${fontSlug}:wght@300;400;600;700&display=swap" rel="stylesheet">`;
+  }
+
+  // GeoJSON
+  const GEO = {
+    province: {url:'https://raw.githubusercontent.com/openpolis/geojson-italy/master/geojson/limits_IT_provinces.geojson', prop:'prov_name', proj:`d3.geoMercator().center([12.5,42.0]).scale(2600).translate([W/2,H/2])`},
+    regioni: {url:'https://raw.githubusercontent.com/openpolis/geojson-italy/master/geojson/limits_IT_regions.geojson', prop:'reg_name', proj:`d3.geoMercator().center([12.5,42.0]).scale(2600).translate([W/2,H/2])`},
+    europa: {url:'https://raw.githubusercontent.com/leakyMirror/map-of-europe/master/GeoJSON/europe.geojson', prop:'NAME', proj:`d3.geoMercator().center([15,54]).scale(620).translate([W/2,H/2])`},
+  };
+  const geo = GEO[S.territory] || GEO.province;
+
+  // Color interpolator
+  const INTERPOLATORS = {
+    'bianco-blu': `d3.interpolateRgb('#f0f8ff','#083d7f')`,
+    'bianco-verde': `d3.interpolateRgb('#f0fff4','#1a5c2a')`,
+    'bianco-rosso': `d3.interpolateRgb('#fff5f5','#8b0000')`,
+    'semaforo': `t=>d3.interpolateRdYlGn(1-t)`,
+    'calore': `d3.interpolateYlOrRd`,
+    'viola-oro': `d3.interpolateRgb('#f3e8ff','#4c1d95')`,
+    'oceano': `d3.interpolateRgb('#e0f7fa','#006064')`,
+    'personalizzata': `d3.interpolateRgb('${S.colStart}','${S.colEnd}')`,
+  };
+  const interp = INTERPOLATORS[S.palette] || INTERPOLATORS['bianco-blu'];
+
+  // Scale
+  let scaleCode;
+  let stepSetupCode = ''; // codice extra per scale a step
+  let legendCode = 'buildLegend(colorScale, minVal, maxVal, fmt);'; // default
+
+  if (S.vizType === 'step') {
+    // Scale a fasce discrete
+    const n = S.stepN;
+    const userLabels = S.stepLabels ? S.stepLabels.split(',').map(l=>l.trim()) : [];
+    if (S.stepMode === 'manual' && S.stepManual) {
+      const thresholds = S.stepManual.split(',').map(v => parseFloat(v.trim())).filter(v => !isNaN(v));
+      const colors = `d3.quantize(${interp}, ${thresholds.length + 1})`;
+      stepSetupCode = `const stepThresholds=[${thresholds.join(',')}];const stepColors=${colors};const stepLabels=${JSON.stringify(userLabels)};`;
+    } else if (S.stepMode === 'equal') {
+      stepSetupCode = `const stepThresholds=d3.range(1,${n}).map(i=>minVal+i*(maxVal-minVal)/${n});const stepColors=d3.quantize(${interp},${n});const stepLabels=${JSON.stringify(userLabels)};`;
+    } else {
+      // auto = quantili
+      stepSetupCode = `const stepThresholds=(()=>{const vals=Object.values(DATA).filter(v=>v!==null).sort((a,b)=>a-b);return d3.range(1,${n}).map(i=>vals[Math.floor(i*vals.length/${n})]);})();const stepColors=d3.quantize(${interp},${n});const stepLabels=${JSON.stringify(userLabels)};`;
+    }
+    scaleCode = `(v=>{if(v===null)return'#cccccc';const idx=stepThresholds.filter(t=>v>t).length;return stepColors[Math.min(idx,stepColors.length-1)];})`;
+    legendCode = 'buildStepLegend(stepThresholds, stepColors, stepLabels, fmt);';
+  } else if (S.scala === 'logaritmica') {
+    scaleCode = `d3.scaleSequentialLog().domain([Math.max(1,minVal),maxVal]).interpolator(${interp})`;
+  } else if (S.scala === 'quantili') {
+    scaleCode = `d3.scaleQuantile().domain(Object.values(DATA).filter(v=>v!==null)).range(d3.quantize(${interp},${S.quantileN}))`;
+  } else {
+    scaleCode = `d3.scaleSequential().domain([minVal,maxVal]).interpolator(${interp})`;
+  }
+
+  // Themes
+  const THEMES = {
+    chiaro: `--bg:#f4f6f9;--card:#ffffff;--title:#1a2940;--sub:#5a7a9a;--border:#e0e8f0;--alt:#f8fafc;--foot:#8a9ab0;`,
+    scuro: `--bg:#0f1923;--card:#1a2535;--title:#e8f0fe;--sub:#8aa0c0;--border:#2a3a4e;--alt:#1f2d3d;--foot:#506070;`,
+    corporate: `--bg:#f4f6f9;--card:#ffffff;--title:#1e3a5f;--sub:#4a6a8a;--border:#dde4ed;--alt:#f0f4f8;--foot:#8a9ab0;`,
+    editoriale: `--bg:#faf8f3;--card:#fffef9;--title:#2c1810;--sub:#8a6a50;--border:#e8e0d0;--alt:#f5f0e8;--foot:#a09080;`,
+  };
+  const themeVars = THEMES[S.tema] || THEMES.chiaro;
+  const accentColor = S.tema === 'scuro' ? '#5b8fff' : S.tema === 'corporate' ? '#1e5fa3' : S.tema === 'editoriale' ? '#8b4513' : '#2171b5';
+
+  // Map background
+  const mapBgColors = {trasparente:'transparent', bianco:'#ffffff', grigio:'#f0f4f8', 'custom-bg': S.mapBgCustom || '#e8edf5'};
+  const mapBgColor = mapBgColors[S.mapBg] || 'transparent';
+
+  // Font format
+  const fmtFn = buildFmtFn();
+
+  // Label size
+  let lblFsCode;
+  if (S.lblSize === 'auto') lblFsCode = `Math.max(5,Math.min(areaW*.18,10))`;
+  else if (S.lblSize === 'small') lblFsCode = `6`;
+  else if (S.lblSize === 'medium') lblFsCode = `8`;
+  else if (S.lblSize === 'large') lblFsCode = `10`;
+  else lblFsCode = `${S.lblSizeCustom || 9}`;
+
+  // Label color
+  let lblColorCode;
+  if (S.lblColor === 'auto') lblColorCode = `t>0.45?'#ffffff':'#1a1a1a'`;
+  else if (S.lblColor === 'white') lblColorCode = `'#ffffff'`;
+  else if (S.lblColor === 'dark') lblColorCode = `'#1a1a1a'`;
+  else lblColorCode = `'${S.lblColorCustom || '#333333'}'`;
+
+  // Text decoration styles
+  const lblStyle = [];
+  if (S.lblBold) lblStyle.push(`el.attr('font-weight','700')`);
+  if (S.lblUpper) lblStyle.push(`el.attr('text-decoration','none').text(l=>l.toUpperCase?l.toUpperCase():l)`);
+  const shadowFilter = S.lblShadow ? `<filter id="lbl-shadow"><feDropShadow dx="0" dy="0" stdDeviation="1.5" flood-color="rgba(0,0,0,0.8)"/></filter>` : '';
+  const shadowAttr = S.lblShadow ? `el.attr('filter','url(#lbl-shadow)');` : '';
+  const bgRect = S.lblBg ? `g.append('rect').attr('x',c[0]-areaW*.28).attr('y',c[1]-fs*.7).attr('width',areaW*.56).attr('height',fs*1.3).attr('rx',2).attr('fill','rgba(255,255,255,.55)');` : '';
+
+  // Highlights JS
+  const hlCode = S.highlights.length ? buildHighlightCode() : '';
+
+  // Zoom — FIX 3: include bolleG nel transform
+  const zoomCode = S.zoom ? `
+const zoom=d3.zoom().scaleExtent([1,8]).on('zoom',(e)=>{
+  mapG.attr('transform',e.transform);
+  if(typeof labG!=='undefined')labG.attr('transform',e.transform);
+  if(typeof bolleG!=='undefined')bolleG.attr('transform',e.transform);
+});
+svgMap.call(zoom);` : '';
+
+  // Search
+  const searchHTML = S.search ? `
+<div style="margin-bottom:12px;display:flex;gap:8px;align-items:center;">
+  <input type="text" id="search-input" placeholder="🔍 Cerca provincia…" oninput="doSearch(this.value)"
+    style="flex:1;padding:8px 12px;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--title);font-family:inherit;font-size:.82rem;outline:none;">
+  <button onclick="doSearch('')" style="padding:7px 11px;border-radius:8px;border:1px solid var(--border);background:var(--card);cursor:pointer;color:var(--sub);font-size:.8rem;">✕</button>
+</div>` : '';
+  const searchCode = S.search ? `
+function doSearch(q){
+  const uq=q.trim().toUpperCase();
+  if(!uq){mapG.selectAll('.area').classed('dimmed',false).attr('stroke',d=>getHL(d)||'${S.borderColor}').attr('stroke-width',d=>getHLWidth(d)||${S.borderWidth});return;}
+  mapG.selectAll('.area').classed('dimmed',d=>{const n=(d.properties[GEO_PROP]||'').toUpperCase();return !n.includes(uq);});
+}` : '';
+
+  // FIX 2: Switch dati HTML e JS
+  const col1Label = S._rawHeaders ? (S._rawHeaders[parseInt(document.getElementById('selVal').value)] || 'Valore 1') : 'Valore 1';
+  const switchHTML = (S.compare && DATA_OBJ2) ? `
+<div style="display:flex;gap:6px;align-items:center;background:var(--card);border:1px solid var(--border);border-radius:8px;padding:4px 6px;">
+  <span style="font-size:.72rem;color:var(--sub);font-weight:600;">Switch:</span>
+  <button id="sw1" onclick="switchData(1)" style="padding:5px 10px;border-radius:6px;border:none;background:${accentColor};color:#fff;font-family:inherit;font-size:.75rem;font-weight:700;cursor:pointer;">${col1Label}</button>
+  <button id="sw2" onclick="switchData(2)" style="padding:5px 10px;border-radius:6px;border:1px solid var(--border);background:var(--card);color:var(--sub);font-family:inherit;font-size:.75rem;font-weight:600;cursor:pointer;">${col2Label}</button>
+</div>` : '';
+
+  const switchCode = (S.compare && DATA_OBJ2) ? `
+const DATA2=${JSON.stringify(DATA_OBJ2)};
+const norm2=Object.fromEntries(Object.entries(DATA2).map(([k,v])=>[k.toUpperCase().trim(),v]));
+function lookup2(name){if(!name)return null;const u=name.toUpperCase().trim();if(EXCL.has(u))return null;if(norm2[u]!==undefined)return norm2[u];const syn=SYNONYMS[name]||SYNONYMS[u];if(syn&&norm2[syn.toUpperCase()]!==undefined)return norm2[syn.toUpperCase()];for(const[k,v]of Object.entries(norm2)){if(u.includes(k)||k.includes(u))return v;}return null;}
+let activeDataset=1;
+function makeColorScale(vals){
+  const mn=Math.max(1,Math.min(...vals)),mx=Math.max(...vals);
+  ${S.vizType==='step' ? `return colorScale;` :
+    S.scala==='logaritmica' ? `return d3.scaleSequentialLog().domain([mn,mx]).interpolator(${interp});` :
+    S.scala==='quantili' ? `return d3.scaleQuantile().domain(vals).range(d3.quantize(${interp},${S.quantileN || 5}));` :
+    `return d3.scaleSequential().domain([mn,mx]).interpolator(${interp});`}
+}
+function getColor2(v){if(v===null)return'#cccccc';const sc=makeColorScale(Object.values(DATA2).filter(x=>x!==null));return sc(Math.max(1,v));}
+function switchData(n){
+  activeDataset=n;
+  if(n===1){
+    mapG.selectAll('.area').attr('fill',d=>getColor(lookup(d.properties[GEO_PROP])));
+  } else {
+    mapG.selectAll('.area').attr('fill',d=>getColor2(lookup2(d.properties[GEO_PROP])));
+  }
+  document.getElementById('sw1').style.cssText=n===1?'padding:5px 10px;border-radius:6px;border:none;background:${accentColor};color:#fff;font-family:inherit;font-size:.75rem;font-weight:700;cursor:pointer;':'padding:5px 10px;border-radius:6px;border:1px solid var(--border);background:var(--card);color:var(--sub);font-family:inherit;font-size:.75rem;font-weight:600;cursor:pointer;';
+  document.getElementById('sw2').style.cssText=n===2?'padding:5px 10px;border-radius:6px;border:none;background:${accentColor};color:#fff;font-family:inherit;font-size:.75rem;font-weight:700;cursor:pointer;':'padding:5px 10px;border-radius:6px;border:1px solid var(--border);background:var(--card);color:var(--sub);font-family:inherit;font-size:.75rem;font-weight:600;cursor:pointer;';
+}` : '';
+  const exportScript = S.exportpng ? `<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"><\/script>` : '';
+  const exportCode = S.exportpng ? `function exportPNG(){html2canvas(document.getElementById('map-container'),{backgroundColor:getComputedStyle(document.documentElement).getPropertyValue('--card').trim()||'#fff',scale:2,useCORS:true}).then(c=>{const a=document.createElement('a');a.download='${(S.title||'mappa').replace(/[^a-z0-9]/gi,'_')}.png';a.href=c.toDataURL();a.click();});}` : '';
+
+  // Export PNG
+  const exportHTML = S.exportpng ? `<button onclick="exportPNG()" style="padding:8px 14px;border-radius:8px;border:1px solid var(--border);background:var(--card);cursor:pointer;color:var(--sub);font-family:inherit;font-size:.8rem;font-weight:600;transition:all .15s;" onmouseover="this.style.borderColor='${accentColor}'" onmouseout="this.style.borderColor='var(--border)'">📸 Esporta PNG</button>` : '';
+  const animCSS = S.animation ? `@keyframes fadeInProv{from{opacity:0}to{opacity:1}}.area{animation:fadeInProv .5s ease forwards;opacity:0;}` : '';
+  const animCode = S.animation ? `mapG.selectAll('.area').style('animation-delay',(d,i)=>i*1.5+'ms');` : '';
+
+  // Leader lines label code — sistema a gomito ortogonale
+  const labelCode = (S.lblVal || S.lblNome) ? `
+  const labG=svgMap.append('g').attr('pointer-events','none');
+  ${shadowFilter ? `(function(){const defs=svgMap.select('defs').empty()?svgMap.append('defs'):svgMap.select('defs');defs.html(defs.html()+'${shadowFilter.replace(/'/g,"\\'")}');})();` : ''}
+  geoData.features.forEach(feat=>{
+    const name=feat.properties[GEO_PROP]||'';
+    const v=lookup(name);
+    const c=path.centroid(feat);
+    if(isNaN(c[0])||isNaN(c[1]))return;
+    const bounds=path.bounds(feat);
+    const areaW=Math.max(1,bounds[1][0]-bounds[0][0]);
+    const areaH=Math.max(1,bounds[1][1]-bounds[0][1]);
+    const fs=${lblFsCode};
+    const t=(v!==null&&maxVal>minVal)?(${S.scala==='logaritmica'?`Math.log(Math.max(1,v)/Math.max(1,minVal))/Math.log(Math.max(2,maxVal/Math.max(1,minVal)))`:S.scala==='quantili'?'0.5':`(v-minVal)/Math.max(1,maxVal-minVal)`}):0;
+    const tc=${lblColorCode};
+    const lines=[];
+    ${S.lblNome ? `lines.push(name.length>9?name.slice(0,8)+'…':name);` : ''}
+    ${S.lblVal ? `lines.push(v!==null?fmt(v):'');` : ''}
+    const validLines=lines.filter(Boolean);
+    if(!validLines.length)return;
+    const maxChars=validLines.reduce((mx,l)=>Math.max(mx,l.length),0);
+    const textW=maxChars*fs*0.62;
+    const useLeader=${S.lblPos === 'leader' ? 'true' : 'false'} && (textW>areaW*0.85 || areaW<20 || areaH<14);
+    if(useLeader){
+      // Sistema a gomito: determina il lato più vicino al bordo SVG
+      const dLeft=c[0];
+      const dRight=W-c[0];
+      const dTop=c[1];
+      const dBot=H-c[1];
+      const minDist=Math.min(dLeft,dRight,dTop,dBot);
+      let ex,ey,anchor;
+      const step1=Math.max(areaW,areaH)*0.5+10;
+      const step2=textW+8;
+      if(minDist===dLeft||dLeft<dRight*0.6){
+        // gomito verso sinistra
+        ex=Math.max(4,c[0]-step1-step2); ey=c[1]; anchor='end';
+      } else {
+        // gomito verso destra
+        ex=Math.min(W-4,c[0]+step1+step2); ey=c[1]; anchor='start';
+      }
+      const midX=anchor==='end'?c[0]-step1:c[0]+step1;
+      // linea spezzata: centroide → punto orizzontale → punto testo
+      labG.append('polyline')
+        .attr('points',\`\${c[0]},\${c[1]} \${midX},\${c[1]} \${midX},\${ey}\`)
+        .attr('stroke','rgba(120,130,150,0.7)').attr('stroke-width',.7)
+        .attr('fill','none').attr('stroke-dasharray','none');
+      labG.append('circle').attr('cx',c[0]).attr('cy',c[1]).attr('r',2).attr('fill','rgba(120,130,150,0.8)');
+      // sfondo testo
+      const bx=anchor==='start'?midX+2:midX-textW-4;
+      labG.append('rect').attr('x',bx).attr('y',ey-(validLines.length*fs*1.25)/2-2)
+        .attr('width',textW+4).attr('height',validLines.length*fs*1.25+4)
+        .attr('rx',2).attr('fill','rgba(255,255,255,0.82)');
+      validLines.forEach((l,li)=>{
+        const el=labG.append('text')
+          .attr('x',anchor==='start'?midX+4:midX-4)
+          .attr('y',ey+(li-(validLines.length-1)/2)*fs*1.3)
+          .attr('text-anchor',anchor).attr('dominant-baseline','middle')
+          .attr('font-size',fs).attr('fill','#222').text(l);
+        ${S.lblBold ? `el.attr('font-weight','700');` : ''}
+      });
+    } else {
+      ${bgRect}
+      validLines.forEach((l,li)=>{
+        const el=labG.append('text')
+          .attr('x',c[0]).attr('y',c[1]+(li-(validLines.length-1)/2)*fs*1.3)
+          .attr('text-anchor','middle').attr('dominant-baseline','middle')
+          .attr('font-size',fs).attr('fill',tc).text(l);
+        ${S.lblBold ? `el.attr('font-weight','700');` : ''}
+        ${S.lblShadow ? `el.attr('filter','url(#lbl-shadow)');` : ''}
+      });
+    }
+  });` : '';
+
+  // Dashboard
+  const isDash = S.vizType === 'dashboard';
+  const chartScript = isDash ? `<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"><\/script>` : '';
+
+  return `<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>${title}</title>
+${fontImport}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"><\/script>
+${chartScript}${exportScript}
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+:root{${themeVars}font-family:'${font}',sans-serif;}
+${animCSS}
+body{background:var(--bg);color:var(--title);min-height:100vh;}
+.area{stroke:${S.borderColor};stroke-width:${S.borderWidth};cursor:pointer;transition:opacity .15s;}
+.area:hover{opacity:.8;}
+.area.dimmed{opacity:.12;}
+.area.hl-pulse{animation:hlPulse 1.5s infinite;}
+@keyframes hlPulse{0%,100%{stroke-opacity:1}50%{stroke-opacity:.3}}
+.header{background:var(--card);border-bottom:3px solid ${accentColor};padding:20px 28px;box-shadow:0 2px 10px rgba(0,0,0,.06);}
+.header h1{font-size:1.45rem;font-weight:700;}
+.header p{font-size:.82rem;color:var(--sub);margin-top:3px;}
+.kpi-row{display:flex;gap:10px;max-width:1200px;margin:16px auto 0;padding:0 20px;flex-wrap:wrap;}
+.kpi{background:var(--card);border-radius:10px;padding:12px 16px;flex:1;min-width:130px;border-top:3px solid ${accentColor};box-shadow:0 2px 8px rgba(0,0,0,.05);}
+.kpi-l{font-size:.65rem;color:var(--sub);text-transform:uppercase;letter-spacing:.5px;font-weight:700;}
+.kpi-v{font-size:1.25rem;font-weight:700;margin-top:2px;}
+.kpi-s{font-size:.68rem;color:var(--sub);}
+${S.slider ? `.slider-wrap{max-width:1200px;margin:12px auto 0;padding:0 20px;}.slider-card{background:var(--card);border-radius:10px;padding:10px 16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;box-shadow:0 2px 8px rgba(0,0,0,.05);}.slab{font-size:.78rem;color:var(--sub);font-weight:600;white-space:nowrap;}#sval{font-size:.78rem;font-weight:700;white-space:nowrap;color:${accentColor};}.sinp{flex:1;min-width:160px;}.sinp input[type=range]{width:100%;display:block;margin:2px 0;accent-color:${accentColor};}.btn-r{padding:5px 10px;border-radius:6px;border:1px solid var(--border);background:var(--card);cursor:pointer;font-size:.72rem;font-family:inherit;color:var(--sub);}` : ''}
+.wrap{display:grid;grid-template-columns:${isDash?'1fr 290px':'1fr'};gap:14px;max-width:1200px;margin:14px auto 0;padding:0 20px;}
+@media(max-width:860px){.wrap{grid-template-columns:1fr;}}
+.card{background:var(--card);border-radius:12px;padding:14px;box-shadow:0 2px 8px rgba(0,0,0,.05);}
+.card-title{font-size:.7rem;font-weight:700;color:var(--sub);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px;}
+.legend-wrap{margin-top:10px;}
+${isDash?`.sidebar-charts{display:flex;flex-direction:column;gap:12px;}.ch-wrap{position:relative;height:190px;}table{width:100%;border-collapse:collapse;font-size:.75rem;}.tscroll{max-height:260px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;}thead th{position:sticky;top:0;background:var(--card);border-bottom:2px solid var(--border);padding:5px 8px;text-align:left;color:var(--sub);font-weight:700;font-size:.65rem;text-transform:uppercase;}tbody tr{border-top:1px solid var(--border);}tbody tr:nth-child(even){background:var(--alt);}tbody td{padding:4px 8px;}.td-r{text-align:right;font-weight:700;}.td-s{text-align:right;color:var(--sub);font-size:.68rem;}` : ''}
+#tt{position:fixed;background:rgba(10,20,40,.93);color:#fff;padding:9px 14px;border-radius:8px;font-size:.8rem;pointer-events:none;opacity:0;z-index:100;box-shadow:0 4px 14px rgba(0,0,0,.22);line-height:1.7;max-width:210px;transition:opacity .1s;}
+#det{display:none;position:fixed;bottom:18px;right:18px;background:var(--card);border-radius:14px;padding:16px 18px;width:240px;box-shadow:0 8px 28px rgba(0,0,0,.14);z-index:50;border:1px solid var(--border);}
+.det-name{font-size:.9rem;font-weight:700;}
+.det-v{font-size:1.6rem;font-weight:800;color:${accentColor};margin:5px 0 3px;}
+.det-meta{font-size:.73rem;color:var(--sub);line-height:1.7;}
+.det-x{position:absolute;top:8px;right:10px;background:none;border:none;font-size:1rem;cursor:pointer;color:var(--sub);}
+#loading{text-align:center;padding:50px 20px;color:var(--sub);}
+.spin{font-size:2rem;animation:spin 2s linear infinite;}
+@keyframes spin{to{transform:rotate(360deg)}}
+.toolbar{max-width:1200px;margin:12px auto 0;padding:0 20px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;}
+.footer{max-width:1200px;margin:16px auto;padding:0 20px 24px;font-size:.7rem;color:var(--foot);display:flex;justify-content:space-between;flex-wrap:wrap;gap:6px;border-top:1px solid var(--border);padding-top:10px;}
+${S.highlights.length ? buildHighlightCSS() : ''}
+</style>
+</head>
+<body>
+<div class="header">
+  <h1>${title}</h1>
+  <p>${S.subtitle || (S.territory==='province'?'Distribuzione per provincia · Italia':S.territory==='regioni'?'Distribuzione per regione · Italia':'Distribuzione per nazione · Europa')}${S.source ? ' · Fonte: '+S.source : ''} · Scala ${S.scala}</p>
+</div>
+<div class="kpi-row" id="kpi-row"></div>
+${S.slider ? `<div class="slider-wrap"><div class="slider-card"><span class="slab">🎚 Filtra:</span><div class="sinp"><input type="range" id="s-lo"><input type="range" id="s-hi"></div><span id="sval">tutti</span><button class="btn-r" id="s-reset">↺</button></div></div>` : ''}
+<div class="toolbar">
+  ${searchHTML}
+  ${switchHTML}
+  ${exportHTML}
+  ${S.zoom ? `<span style="font-size:.75rem;color:var(--sub);">🔍 Scroll = zoom · Trascina = muovi mappa</span>` : ''}
+</div>
+<div class="wrap">
+<div class="card" id="map-outer">
+  <div class="card-title">🗺 ${title}</div>
+  <div id="map-container" style="background:${mapBgColor};border-radius:8px;"><div id="loading"><div class="spin">🗺️</div><div style="margin-top:8px;font-size:.9rem;font-weight:600;">Caricamento mappa…</div><div style="font-size:.75rem;margin-top:4px;opacity:.6">Scaricamento dati geografici</div></div></div>
+  <div class="legend-wrap" id="leg"></div>
+</div>
+${isDash ? `<div class="sidebar-charts">
+<div class="card"><div class="card-title">🏆 Top 10</div><div class="ch-wrap"><canvas id="c-top"></canvas></div></div>
+<div class="card"><div class="card-title">📋 Classifica</div><div class="tscroll"><table><thead><tr><th>#</th><th>Territorio</th><th style="text-align:right">Valore</th><th style="text-align:right">%</th></tr></thead><tbody id="rank-body"></tbody></table></div></div>
+</div>` : ''}
+</div>
+${isDash ? `<div class="wrap" style="margin-top:12px;"><div class="card"><div class="card-title">📉 Bottom 10</div><div style="height:190px;position:relative;"><canvas id="c-bot"></canvas></div></div><div class="card"><div class="card-title">🍩 Distribuzione macro-aree</div><div style="height:190px;position:relative;"><canvas id="c-macro"></canvas></div></div></div>` : ''}
+<div class="footer">
+  <span>${title}${S.source ? ' · ' + S.source : ''}</span>
+  <span>⚠️ Richiede connessione internet · GeoMap Builder v2.0</span>
+</div>
+<div id="tt"></div>
+<div id="det"><button class="det-x" onclick="this.parentElement.style.display='none'">✕</button><div id="det-c"></div></div>
+<script>
+const DATA=${JSON.stringify(DATA_OBJ)};
+const SYNONYMS=${JSON.stringify(SYNONYMS)};
+const EXCL=new Set(['ALTRO','SAN MARINO','ESTERO','ND','N/D','TOTALE','ITALIA']);
+const norm=Object.fromEntries(Object.entries(DATA).map(([k,v])=>[k.toUpperCase().trim(),v]));
+function lookup(name){if(!name)return null;const u=name.toUpperCase().trim();if(EXCL.has(u))return null;if(norm[u]!==undefined)return norm[u];const syn=SYNONYMS[name]||SYNONYMS[u];if(syn&&norm[syn.toUpperCase()]!==undefined)return norm[syn.toUpperCase()];for(const[k,v]of Object.entries(norm)){if(u.includes(k)||k.includes(u))return v;}return null;}
+${fmtFn}
+const allV=Object.values(DATA);
+const total=allV.reduce((a,b)=>a+b,0);
+const avg=Math.round(total/allV.length);
+const maxE=Object.entries(DATA).reduce((a,b)=>b[1]>a[1]?b:a);
+const minE=Object.entries(DATA).reduce((a,b)=>b[1]<a[1]?b:a);
+window._mapTotal=total;
+// KPI
+const kpiRow=document.getElementById('kpi-row');
+[{l:'Totale',v:fmt(total)},{l:'Media',v:fmt(avg)},{l:'Massimo',v:fmt(maxE[1]),s:maxE[0]},{l:'Minimo',v:fmt(minE[1]),s:minE[0]}].forEach(k=>{kpiRow.innerHTML+=\`<div class="kpi"><div class="kpi-l">\${k.l}</div><div class="kpi-v">\${k.v}</div>\${k.s?'<div class="kpi-s">'+k.s+'</div>':''}</div>\`;});
+const minVal=Math.max(1,Math.min(...allV)),maxVal=Math.max(...allV);
+${stepSetupCode}
+${S.vizType === 'step' ? `const colorScale=${scaleCode};function getColor(v){return colorScale(v);}` :
+  `const colorScale=${scaleCode};function getColor(v){if(v===null)return'#cccccc';return colorScale(${S.scala==='quantili'?'v':`Math.max(minVal,v)`});}`}
+// Highlights
+const HIGHLIGHTS=${JSON.stringify(S.highlights.map(h=>({...h, n: Number(h.n)})))};
+const sorted_keys=Object.entries(DATA).sort((a,b)=>b[1]-a[1]).map(([k])=>k.toUpperCase());
+function getHLStyle(rawName){
+  if(!rawName)return null;
+  const u=rawName.toUpperCase().trim();
+  for(const h of HIGHLIGHTS){
+    let keys=[];
+    const hn=Number(h.n);
+    if(h.type==='top') keys=sorted_keys.slice(0,hn);
+    else if(h.type==='bottom') keys=sorted_keys.slice(-hn);
+    else if(h.type==='middle'){const mid=Math.floor(sorted_keys.length/2);const half=Math.floor(hn/2);keys=sorted_keys.slice(Math.max(0,mid-half),mid+half);}
+    else if(h.type==='above') keys=Object.entries(DATA).filter(([,v])=>v>=hn).map(([k])=>k.toUpperCase());
+    else if(h.type==='below') keys=Object.entries(DATA).filter(([,v])=>v<=hn).map(([k])=>k.toUpperCase());
+    // confronto diretto, poi fuzzy (include)
+    if(keys.includes(u)) return h;
+    if(keys.some(k=>k.includes(u)||u.includes(k))) return h;
+  }
+  return null;
+}
+function getHL(d){const h=getHLStyle(d.properties[GEO_PROP]||'');return h?h.color:null;}
+function getHLWidth(d){const h=getHLStyle(d.properties[GEO_PROP]||'');return h&&(h.style==='border')?2.5:null;}
+// Legenda gradiente continuo
+function buildLegend(cs,mn,mx,fmt){const c=document.getElementById('leg');const id='lg'+Date.now();const svg=d3.select(c).append('svg').attr('width','100%').attr('height',46).attr('viewBox','0 0 280 46');const defs=svg.append('defs');const g=defs.append('linearGradient').attr('id',id);d3.range(0,1.01,.05).forEach(t=>{g.append('stop').attr('offset',t*100+'%').attr('stop-color',${S.scala==='logaritmica'?`cs(mn*Math.pow(mx/mn,t))`:`cs(mn+t*(mx-mn))`});});svg.append('rect').attr('x',8).attr('y',6).attr('width',264).attr('height',12).attr('rx',6).attr('fill','url(#'+id+')').attr('stroke','#ccd8e8').attr('stroke-width',.5);svg.append('text').attr('x',8).attr('y',36).text(fmt(mn)).attr('font-size','10px').attr('fill','var(--sub)');svg.append('text').attr('x',272).attr('y',36).text(fmt(mx)).attr('text-anchor','end').attr('font-size','10px').attr('fill','var(--sub)');}
+// Legenda step (fasce discrete)
+function buildStepLegend(thresholds,colors,labels,fmt){const c=document.getElementById('leg');const n=colors.length;const w=Math.floor(264/n);const svg=d3.select(c).append('svg').attr('width','100%').attr('height',54).attr('viewBox','0 0 280 54');colors.forEach((col,i)=>{svg.append('rect').attr('x',8+i*w).attr('y',6).attr('width',w).attr('height',14).attr('fill',col);const lo=i===0?null:thresholds[i-1];const hi=i===thresholds.length?null:thresholds[i];const lbl=labels[i]||(lo===null?'< '+fmt(hi):hi===undefined?'> '+fmt(lo):fmt(lo)+' – '+fmt(hi));svg.append('text').attr('x',8+i*w+w/2).attr('y',38).attr('text-anchor','middle').attr('font-size','8.5px').attr('fill','var(--sub)').text(lbl.length>10?lbl.slice(0,9)+'…':lbl);});}
+${legendCode}
+const GEO_URL='${geo.url}';
+const GEO_PROP='${geo.prop}';
+const W=860,H=1000;
+let svgMap,mapG,labG;
+fetch(GEO_URL).then(r=>{if(!r.ok)throw new Error('HTTP '+r.status);return r.json();}).then(geoData=>{
+  document.getElementById('loading').remove();
+  const proj=${geo.proj};
+  const path=d3.geoPath().projection(proj);
+  const container=document.getElementById('map-container');
+  svgMap=d3.select(container).append('svg').attr('viewBox','0 0 '+W+' '+H).style('width','100%').style('height','auto');
+  mapG=svgMap.append('g');
+  const tt=d3.select('#tt');
+  mapG.selectAll('.area').data(geoData.features).enter().append('path')
+    .attr('class',d=>{const h=getHLStyle(d.properties[GEO_PROP]||'');return 'area'+(h&&h.style==='pulse'?' hl-pulse':'');})
+    .attr('d',path)
+    .attr('fill',${S.vizType==='bolle' ? ( S.bolleBg==='coropletica' ? `d=>getColor(lookup(d.properties[GEO_PROP]))` : S.bolleBg==='bianco' ? `'#ffffff'` : `'#e8edf5'`) : `d=>getColor(lookup(d.properties[GEO_PROP]))`})
+    .attr('stroke',d=>getHL(d)||'${S.borderColor}')
+    .attr('stroke-width',d=>getHLWidth(d)||${S.borderWidth})
+  ${S.tooltip ? `.on('mousemove',(e,d)=>{
+      const n=d.properties[GEO_PROP]||'';
+      const lkpFn=(typeof activeDataset!=='undefined'&&activeDataset===2)?lookup2:lookup;
+      const v=lkpFn(n);
+      let h='<strong>'+n+'</strong>';
+      if(v!==null){h+='<br>'+fmt(v)+'<br><span style="opacity:.7">'+((v/total)*100).toFixed(1)+'% del totale</span>';}
+      else h+='<br><span style="color:#ffaaaa">N/D</span>';
+      tt.style('opacity',1).style('left',(e.clientX+14)+'px').style('top',(e.clientY-8)+'px').html(h);
+    }).on('mouseleave',()=>tt.style('opacity',0))` : ''}
+  ${S.click ? `.on('click',(e,d)=>{
+      const n=d.properties[GEO_PROP]||'';
+      const lkpFn=(typeof activeDataset!=='undefined'&&activeDataset===2)?lookup2:lookup;
+      const v=lkpFn(n);
+      const dataActive=(typeof activeDataset!=='undefined'&&activeDataset===2)?DATA2:DATA;
+      const rank=Object.entries(dataActive).sort((a,b)=>b[1]-a[1]).findIndex(([k])=>k.toUpperCase()===n.toUpperCase())+1;
+      const tot=Object.values(dataActive).reduce((a,b)=>a+b,0);
+      const av=Math.round(tot/Object.keys(dataActive).length);
+      document.getElementById('det-c').innerHTML='<div class="det-name">'+n+'</div><div class="det-v">'+(v!==null?fmt(v):'N/D')+'</div>'+(v!==null?'<div class="det-meta">Rank: <b>#'+rank+'</b> su '+Object.keys(dataActive).length+'<br>% totale: <b>'+((v/tot)*100).toFixed(1)+'%</b><br>Scarto media: <b>'+(v>=av?'+':'')+fmt(v-av)+'</b></div>':'');
+      document.getElementById('det').style.display='block';
+      e.stopPropagation();
+    })` : ''}
+  ;
+  ${S.vizType === 'bolle' ? `
+  // ── BOLLE PROPORZIONALI ──
+  const bolleR=d3.scaleSqrt().domain([0,maxVal]).range([0,${S.bolleMaxR}]);
+  const bolleG=svgMap.append('g').attr('pointer-events','none');
+  geoData.features.forEach(feat=>{
+    const n=feat.properties[GEO_PROP]||'';
+    const v=lookup(n);
+    if(v===null||v<=0)return;
+    const c=path.centroid(feat);
+    if(isNaN(c[0])||isNaN(c[1]))return;
+    const r=bolleR(v);
+    const col=${S.bolleColor==='fisso'?`'${S.bolleColorFisso}'`:`getColor(v)`};
+    bolleG.append('circle').attr('cx',c[0]).attr('cy',c[1]).attr('r',r)
+      .attr('fill',col).attr('opacity',${S.bolleOpacity})
+      .attr('stroke','${S.borderColor==='#ffffff'?'rgba(255,255,255,0.6)':S.borderColor}').attr('stroke-width',.8)
+      ${S.tooltip ? `.on('mousemove',(e)=>{tt.style('opacity',1).style('left',(e.clientX+14)+'px').style('top',(e.clientY-8)+'px').html('<strong>'+n+'</strong><br>'+fmt(v)+'<br><span style="opacity:.7">'+((v/total)*100).toFixed(1)+'% del totale</span>');}).on('mouseleave',()=>tt.style('opacity',0))` : ''}
+      ;
+  });
+  // Legenda bolle
+  (function(){const lc=document.getElementById('leg');const vals=[maxVal,maxVal/2,maxVal/5].filter(v=>v>0);const svg2=d3.select(lc).append('svg').attr('width','100%').attr('height',80).attr('viewBox','0 0 280 80');const cx=140;vals.forEach((v,i)=>{const r=bolleR(v);svg2.append('circle').attr('cx',cx).attr('cy',72-r).attr('r',r).attr('fill','none').attr('stroke','var(--sub)').attr('stroke-width',.8);svg2.append('text').attr('x',cx+r+4).attr('y',72-r*2+4).attr('font-size','9px').attr('fill','var(--sub)').text(fmt(v));});})();
+  ` : ''}
+  ${animCode}
+  ${labelCode}
+  ${zoomCode}
+  ${S.slider ? buildSliderCode(S, accentColor) : ''}
+  ${searchCode}
+  ${hlCode}
+  ${S.click ? `document.addEventListener('click',()=>{document.getElementById('det').style.display='none';});` : ''}
+  ${isDash ? buildDashboardChartCode(DATA_OBJ, accentColor) : ''}
+}).catch(err=>{document.getElementById('loading').innerHTML='<p style="color:#c00;padding:30px;text-align:center;">⚠️ Errore caricamento mappa<br><small>'+err.message+'</small><br><br>Verificare la connessione internet.</p>';});
+${exportCode}
+${switchCode}
+<\/script>
+</body>
+</html>`;
+}
+
+function buildSliderCode(S, accentColor) {
+  return `const sLo=document.getElementById('s-lo'),sHi=document.getElementById('s-hi'),sVal=document.getElementById('sval');
+  sLo.min=sHi.min=Math.floor(minVal);sLo.max=sHi.max=Math.ceil(maxVal);sLo.value=Math.floor(minVal);sHi.value=Math.ceil(maxVal);
+  sVal.textContent=fmt(Math.floor(minVal))+' – '+fmt(Math.ceil(maxVal));
+  function updS(){let lo=+sLo.value,hi=+sHi.value;if(lo>hi){sLo.value=hi;lo=hi;}sVal.textContent=fmt(lo)+' – '+fmt(hi);mapG.selectAll('.area').attr('fill',d=>{const v=lookup(d.properties['${S.territory==='province'?'prov_name':S.territory==='regioni'?'reg_name':'NAME'}']);if(v===null)return'#cccccc';if(v<lo||v>hi)return'#e8edf5';return getColor(v);}).classed('dimmed',d=>{const v=lookup(d.properties['${S.territory==='province'?'prov_name':S.territory==='regioni'?'reg_name':'NAME'}']);return v!==null&&(v<lo||v>hi);});}
+  sLo.addEventListener('input',updS);sHi.addEventListener('input',updS);
+  document.getElementById('s-reset').addEventListener('click',()=>{sLo.value=Math.floor(minVal);sHi.value=Math.ceil(maxVal);updS();});`;
+}
+
+function buildHighlightCSS() {
+  return S.highlights.map(h => {
+    if (h.style === 'hatch') return `.hl-hatch-${h.id}{fill:url(#hatch-${h.id})!important;}`;
+    return '';
+  }).join('');
+}
+
+function buildHighlightCode() {
+  if (!S.highlights.length) return '';
+  return S.highlights.map(h => {
+    const hid = h.id;
+    const col = h.color;
+    const n = h.n;
+    const type = h.type;
+    const style = h.style;
+    // Filtro: seleziona le aree del gruppo
+    const filterExpr = `d=>{const hs=getHLStyle(d.properties[GEO_PROP]||'');return hs&&hs.id===${hid};}`;
+    if (style === 'border') {
+      return `mapG.selectAll('.area').filter(${filterExpr}).attr('stroke','${col}').attr('stroke-width',3);`;
+    }
+    if (style === 'hatch') {
+      return `
+(function(){
+  const defs=svgMap.select('defs').empty()?svgMap.append('defs'):svgMap.select('defs');
+  defs.append('pattern').attr('id','hatch-${hid}').attr('patternUnits','userSpaceOnUse').attr('width',6).attr('height',6)
+    .append('path').attr('d','M-1,1 l2,-2 M0,6 l6,-6 M5,7 l2,-2').attr('stroke','${col}').attr('stroke-width',1.5);
+  mapG.selectAll('.area').filter(${filterExpr}).attr('fill','url(#hatch-${hid})').attr('stroke','${col}').attr('stroke-width',1.5);
+})();`;
+    }
+    if (style === 'pulse') {
+      return `mapG.selectAll('.area').filter(${filterExpr}).attr('stroke','${col}').attr('stroke-width',3).classed('hl-pulse',true);`;
+    }
+    if (style === 'bright') {
+      return `mapG.selectAll('.area').filter(${filterExpr}).style('filter','brightness(1.4) saturate(1.3)').attr('stroke','${col}').attr('stroke-width',2);`;
+    }
+    return '';
+  }).join('\n');
+}
+
+function buildDashboardChartCode(dataObj, accent) {
+  const sorted = Object.entries(dataObj).sort((a,b)=>b[1]-a[1]);
+  const top10 = sorted.slice(0,10);
+  const bot10 = sorted.slice(-10).reverse();
+  const total = Object.values(dataObj).reduce((a,b)=>a+b,0);
+  const NORD=['TORINO','VERCELLI','NOVARA','CUNEO','ASTI','ALESSANDRIA','BIELLA','VERBANIA','AOSTA','IMPERIA','SAVONA','GENOVA','LA SPEZIA','VARESE','COMO','SONDRIO','MILANO','BERGAMO','BRESCIA','PAVIA','CREMONA','MANTOVA','LECCO','LODI','MONZA BRIANZA','BOLZANO','TRENTO','VERONA','VICENZA','BELLUNO','TREVISO','VENEZIA','PADOVA','ROVIGO','UDINE','GORIZIA','TRIESTE','PORDENONE','PIACENZA','PARMA','REGGIO EMILIA','MODENA','BOLOGNA','FERRARA','RAVENNA',"FORLI' CESENA",'RIMINI'];
+  const CENTRO=['MASSA','LUCCA','PISTOIA','FIRENZE','PRATO','LIVORNO','PISA','AREZZO','SIENA','GROSSETO','PERUGIA','TERNI','VITERBO','RIETI','ROMA','LATINA','FROSINONE','ANCONA','PESARO E URBINO','MACERATA','FERMO','ASCOLI PICENO'];
+  let tnord=0,tcentro=0,tsud=0;
+  Object.entries(dataObj).forEach(([k,v])=>{const u=k.toUpperCase();if(NORD.includes(u))tnord+=v;else if(CENTRO.includes(u))tcentro+=v;else tsud+=v;});
+  const body = sorted.map(([k,v],i)=>`<tr><td style="color:var(--sub);font-size:.68rem">${i+1}</td><td>${k}</td><td class="td-r">${v.toLocaleString('it-IT')}</td><td class="td-s">${((v/total)*100).toFixed(1)}%</td></tr>`).join('');
+  // I colori delle barre vengono calcolati a runtime dopo che getColor è disponibile
+  return `document.getElementById('rank-body').innerHTML=\`${body}\`;
+(function(){
+  const topVals=${JSON.stringify(top10.map(([,v])=>v))};
+  const topLabels=${JSON.stringify(top10.map(([k])=>k))};
+  const topColors=topVals.map(v=>getColor(v));
+  new Chart(document.getElementById('c-top').getContext('2d'),{type:'bar',data:{labels:topLabels,datasets:[{data:topVals,backgroundColor:topColors,borderRadius:3,borderSkipped:false}]},options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>' '+c.raw.toLocaleString('it-IT')}}},scales:{x:{grid:{color:'rgba(0,0,0,.04)'},ticks:{font:{size:9},callback:v=>v>=1000?Math.round(v/1000)+'k':v}},y:{grid:{display:false},ticks:{font:{size:9}}}}}});
+})();
+(function(){
+  const botVals=${JSON.stringify(bot10.map(([,v])=>v))};
+  const botLabels=${JSON.stringify(bot10.map(([k])=>k))};
+  const botColors=botVals.map(v=>getColor(v));
+  new Chart(document.getElementById('c-bot').getContext('2d'),{type:'bar',data:{labels:botLabels,datasets:[{data:botVals,backgroundColor:botColors,borderRadius:3,borderSkipped:false}]},options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>' '+c.raw.toLocaleString('it-IT')}}},scales:{x:{grid:{color:'rgba(0,0,0,.04)'},ticks:{font:{size:9}}},y:{grid:{display:false},ticks:{font:{size:9}}}}}});
+})();
+(function(){new Chart(document.getElementById('c-macro').getContext('2d'),{type:'doughnut',data:{labels:['Nord','Centro','Sud+Isole'],datasets:[{data:[${tnord},${tcentro},${tsud}],backgroundColor:['${accent}','rgba(91,143,255,.55)','rgba(91,143,255,.25)'],borderWidth:2,borderColor:'#fff'}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{font:{size:10},padding:8}},tooltip:{callbacks:{label:c=>\` \${c.label}: \${c.raw.toLocaleString('it-IT')} (\${((c.raw/${total})*100).toFixed(1)}%)\`}}}}}); })();`;
+}
+
+// ── INIT ──
+renderTemplateList();
+updateProgress();
+updateSummaries();
+function updateSummaries(){
+  document.getElementById('tag5').textContent=[S.lblVal?'Valore':'',S.lblNome?'Nome':''].filter(Boolean).join('+')||'Nessuna';
+  document.getElementById('tag8').textContent=[S.tooltip?'Tooltip':'',S.zoom?'Zoom':'',S.search?'Cerca':''].filter(Boolean).join('·')||'Nessuna';
+}
+</script>
+</body>
+</html>
