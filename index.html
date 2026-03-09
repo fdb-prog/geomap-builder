@@ -872,7 +872,7 @@ input[type=color]{
       <button class="tab-btn" onclick="switchTab('config',this)">Riepilogo config</button>
     </div>
     <div class="main-actions">
-      <button class="btn btn-secondary btn-sm" id="btnPreview" onclick="previewMap()" disabled>👁 Aggiorna anteprima</button>
+      <button class="btn btn-secondary btn-sm" id="btnPreview" onclick="generate()" disabled>👁 Aggiorna anteprima</button>
       <button class="btn btn-primary btn-sm" id="btnDownload" onclick="downloadMap()" disabled>⬇ Scarica HTML</button>
     </div>
   </div>
@@ -1761,8 +1761,10 @@ function switchData(n){
   activeDataset=n;
   if(n===1){
     mapG.selectAll('.area').attr('fill',d=>getColor(lookup(d.properties[GEO_PROP])));
+    ${hasLabels ? `drawLabels(lookup, DATA);` : ''}
   } else {
     mapG.selectAll('.area').attr('fill',d=>getColor2(lookup2(d.properties[GEO_PROP])));
+    ${hasLabels ? `drawLabels(lookup2, DATA2);` : ''}
   }
   document.getElementById('sw1').style.cssText=n===1?'padding:5px 10px;border-radius:6px;border:none;background:${accentColor};color:#fff;font-family:inherit;font-size:.75rem;font-weight:700;cursor:pointer;':'padding:5px 10px;border-radius:6px;border:1px solid var(--border);background:var(--card);color:var(--sub);font-family:inherit;font-size:.75rem;font-weight:600;cursor:pointer;';
   document.getElementById('sw2').style.cssText=n===2?'padding:5px 10px;border-radius:6px;border:none;background:${accentColor};color:#fff;font-family:inherit;font-size:.75rem;font-weight:700;cursor:pointer;':'padding:5px 10px;border-radius:6px;border:1px solid var(--border);background:var(--card);color:var(--sub);font-family:inherit;font-size:.75rem;font-weight:600;cursor:pointer;';
@@ -1775,78 +1777,109 @@ function switchData(n){
   const animCSS = S.animation ? `@keyframes fadeInProv{from{opacity:0}to{opacity:1}}.area{animation:fadeInProv .5s ease forwards;opacity:0;}` : '';
   const animCode = S.animation ? `mapG.selectAll('.area').style('animation-delay',(d,i)=>i*1.5+'ms');` : '';
 
-  // Leader lines label code — sistema a gomito ortogonale
-  const labelCode = (S.lblVal || S.lblNome) ? `
-  const labG=svgMap.append('g').attr('pointer-events','none');
-  ${shadowFilter ? `(function(){const defs=svgMap.select('defs').empty()?svgMap.append('defs'):svgMap.select('defs');defs.html(defs.html()+'${shadowFilter.replace(/'/g,"\\'")}');})();` : ''}
-  geoData.features.forEach(feat=>{
-    const name=feat.properties[GEO_PROP]||'';
-    const v=lookup(name);
-    const c=path.centroid(feat);
-    if(isNaN(c[0])||isNaN(c[1]))return;
-    const bounds=path.bounds(feat);
-    const areaW=Math.max(1,bounds[1][0]-bounds[0][0]);
-    const areaH=Math.max(1,bounds[1][1]-bounds[0][1]);
-    const fs=${lblFsCode};
-    const t=(v!==null&&maxVal>minVal)?(${S.scala==='logaritmica'?`Math.log(Math.max(1,v)/Math.max(1,minVal))/Math.log(Math.max(2,maxVal/Math.max(1,minVal)))`:S.scala==='quantili'?'0.5':`(v-minVal)/Math.max(1,maxVal-minVal)`}):0;
-    const tc=${lblColorCode};
-    const lines=[];
-    ${S.lblNome ? `lines.push(name.length>9?name.slice(0,8)+'…':name);` : ''}
-    ${S.lblVal ? `lines.push(v!==null?fmt(v):'');` : ''}
-    const validLines=lines.filter(Boolean);
-    if(!validLines.length)return;
-    const maxChars=validLines.reduce((mx,l)=>Math.max(mx,l.length),0);
-    const textW=maxChars*fs*0.62;
-    const useLeader=${S.lblPos === 'leader' ? 'true' : 'false'} && (textW>areaW*0.85 || areaW<20 || areaH<14);
-    if(useLeader){
-      // Sistema a gomito: determina il lato più vicino al bordo SVG
-      const dLeft=c[0];
-      const dRight=W-c[0];
-      const dTop=c[1];
-      const dBot=H-c[1];
-      const minDist=Math.min(dLeft,dRight,dTop,dBot);
-      let ex,ey,anchor;
-      const step1=Math.max(areaW,areaH)*0.5+10;
-      const step2=textW+8;
-      if(minDist===dLeft||dLeft<dRight*0.6){
-        // gomito verso sinistra
-        ex=Math.max(4,c[0]-step1-step2); ey=c[1]; anchor='end';
-      } else {
-        // gomito verso destra
-        ex=Math.min(W-4,c[0]+step1+step2); ey=c[1]; anchor='start';
+  // Leader lines — funzione drawLabels() richiamabile anche dallo switch dati
+  const hasLabels = S.lblVal || S.lblNome;
+  const labelCode = hasLabels ? `
+  let labG=svgMap.append('g').attr('pointer-events','none').attr('id','lab-g');
+  ${shadowFilter ? `(function(){const defs=svgMap.select('defs').empty()?svgMap.append('defs'):svgMap.select('defs');defs.append('filter').attr('id','lbl-shadow').html('<feDropShadow dx="0" dy="0" stdDeviation="1.5" flood-color="rgba(0,0,0,0.8)"/>');})();` : ''}
+
+  function drawLabels(lkpFn, dataVals){
+    labG.selectAll('*').remove();
+    const allVals=Object.values(dataVals).filter(x=>x!==null&&!isNaN(x));
+    const dMin=Math.min(...allVals), dMax=Math.max(...allVals);
+
+    // Prima passata: calcola posizioni
+    const items=[];
+    geoData.features.forEach(feat=>{
+      const name=feat.properties[GEO_PROP]||'';
+      const v=lkpFn(name);
+      const c=path.centroid(feat);
+      if(isNaN(c[0])||isNaN(c[1]))return;
+      const bounds=path.bounds(feat);
+      const areaW=Math.max(1,bounds[1][0]-bounds[0][0]);
+      const areaH=Math.max(1,bounds[1][1]-bounds[0][1]);
+      const fs=${lblFsCode};
+      const t=(v!==null&&dMax>dMin)?((v-dMin)/Math.max(1,dMax-dMin)):0;
+      const tc=${lblColorCode};
+      const lines=[];
+      ${S.lblNome ? `lines.push(name.length>9?name.slice(0,8)+'…':name);` : ''}
+      ${S.lblVal ? `if(v!==null)lines.push(fmt(v));` : ''}
+      const validLines=lines.filter(Boolean);
+      if(!validLines.length)return;
+      const maxChars=validLines.reduce((mx,l)=>Math.max(mx,l.length),0);
+      const textW=maxChars*fs*0.62;
+      const textH=validLines.length*fs*1.4;
+      const useLeader=${S.lblPos === 'leader' ? 'true' : 'false'} && (textW>areaW*0.82 || areaW<22 || areaH<16);
+      items.push({name,v,c,areaW,areaH,fs,tc,validLines,textW,textH,useLeader,bounds});
+    });
+
+    // Collision detection: sposta verticalmente le leader label che si sovrappongono
+    // Separa leader e non-leader
+    const leaderItems=items.filter(i=>i.useLeader);
+    const inlineItems=items.filter(i=>!i.useLeader);
+
+    // Per ogni leader item, calcola posizione base e poi risolvi collisioni
+    const placed=[]; // {cx,cy,x,y,w,h,anchor,midX,item}
+    leaderItems.forEach(item=>{
+      const {c,areaW,areaH,textW,textH,fs}=item;
+      const toLeft=c[0]<W/2;
+      const step1=Math.max(areaW,areaH)*0.45+12;
+      const midX=toLeft?c[0]-step1:c[0]+step1;
+      const anchor=toLeft?'end':'start';
+      let ey=c[1];
+      // Risolvi collisione verticale con label già piazzate
+      let tries=0;
+      while(tries<20){
+        const overlap=placed.some(p=>{
+          const px=toLeft?midX-textW-4:midX;
+          const py=ey-textH/2-2;
+          return !(px+textW+8<p.x||px>p.x+p.w+8||py+textH+4<p.y||py>p.y+p.h+4);
+        });
+        if(!overlap)break;
+        ey+=textH*0.8*(tries%2===0?1:-1)*(Math.floor(tries/2)+1);
+        tries++;
       }
-      const midX=anchor==='end'?c[0]-step1:c[0]+step1;
-      // linea spezzata: centroide → punto orizzontale → punto testo
-      labG.append('polyline')
-        .attr('points',\`\${c[0]},\${c[1]} \${midX},\${c[1]} \${midX},\${ey}\`)
-        .attr('stroke','rgba(120,130,150,0.7)').attr('stroke-width',.7)
-        .attr('fill','none').attr('stroke-dasharray','none');
-      labG.append('circle').attr('cx',c[0]).attr('cy',c[1]).attr('r',2).attr('fill','rgba(120,130,150,0.8)');
-      // sfondo testo
-      const bx=anchor==='start'?midX+2:midX-textW-4;
-      labG.append('rect').attr('x',bx).attr('y',ey-(validLines.length*fs*1.25)/2-2)
-        .attr('width',textW+4).attr('height',validLines.length*fs*1.25+4)
-        .attr('rx',2).attr('fill','rgba(255,255,255,0.82)');
+      const px=toLeft?midX-textW-4:midX+2;
+      placed.push({x:px,y:ey-textH/2-2,w:textW,h:textH,anchor,midX,item,ey,toLeft});
+    });
+
+    // Disegna leader lines con gomito
+    placed.forEach(({item,midX,ey,anchor,toLeft,x,y,w,h})=>{
+      const {c,validLines,fs,tc}=item;
+      // Linea a gomito: punto → orizzontale → verticale se necessario
+      const pts=\`\${c[0]},\${c[1]} \${midX},\${c[1]}\${Math.abs(ey-c[1])>3?\` \${midX},\${ey}\`:''}\`;
+      labG.append('polyline').attr('points',pts)
+        .attr('stroke','rgba(80,100,130,0.55)').attr('stroke-width',.8).attr('fill','none');
+      labG.append('circle').attr('cx',c[0]).attr('cy',c[1]).attr('r',1.8).attr('fill','rgba(80,100,130,0.7)');
+      // Sfondo label
+      labG.append('rect').attr('x',x).attr('y',y).attr('width',w+6).attr('height',h+4).attr('rx',2)
+        .attr('fill','rgba(255,255,255,0.88)').attr('stroke','rgba(180,190,210,0.5)').attr('stroke-width',.5);
       validLines.forEach((l,li)=>{
         const el=labG.append('text')
-          .attr('x',anchor==='start'?midX+4:midX-4)
-          .attr('y',ey+(li-(validLines.length-1)/2)*fs*1.3)
+          .attr('x',anchor==='start'?x+3:x+w+3)
+          .attr('y',y+2+(li+0.5)*fs*1.4)
           .attr('text-anchor',anchor).attr('dominant-baseline','middle')
-          .attr('font-size',fs).attr('fill','#222').text(l);
+          .attr('font-size',fs).attr('fill','#1a2440').text(l);
         ${S.lblBold ? `el.attr('font-weight','700');` : ''}
       });
-    } else {
-      ${bgRect}
+    });
+
+    // Disegna inline labels
+    inlineItems.forEach(({c,validLines,fs,tc,textW,textH,areaW})=>{
+      ${S.lblBg ? `labG.append('rect').attr('x',c[0]-textW/2-2).attr('y',c[1]-textH/2-1).attr('width',textW+4).attr('height',textH+2).attr('rx',2).attr('fill','rgba(255,255,255,0.55)');` : ''}
       validLines.forEach((l,li)=>{
         const el=labG.append('text')
-          .attr('x',c[0]).attr('y',c[1]+(li-(validLines.length-1)/2)*fs*1.3)
+          .attr('x',c[0]).attr('y',c[1]+(li-(validLines.length-1)/2)*fs*1.4)
           .attr('text-anchor','middle').attr('dominant-baseline','middle')
           .attr('font-size',fs).attr('fill',tc).text(l);
         ${S.lblBold ? `el.attr('font-weight','700');` : ''}
         ${S.lblShadow ? `el.attr('filter','url(#lbl-shadow)');` : ''}
       });
-    }
-  });` : '';
+    });
+  }
+
+  // Disegna etichette iniziali
+  drawLabels(lookup, DATA);` : '';
 
   // Dashboard
   const isDash = S.vizType === 'dashboard';
@@ -1865,11 +1898,10 @@ ${chartScript}${exportScript}
 :root{${themeVars}font-family:'${font}',sans-serif;}
 ${animCSS}
 body{background:var(--bg);color:var(--title);min-height:100vh;}
-.area{stroke:${S.borderColor};stroke-width:${S.borderWidth};cursor:pointer;transition:opacity .15s;}
-.area:hover{opacity:.8;}
-.area.dimmed{opacity:.12;}
-.area.hl-pulse{animation:hlPulse 1.5s infinite;}
-@keyframes hlPulse{0%,100%{stroke-opacity:1}50%{stroke-opacity:.3}}
+.area{stroke:${S.borderColor};stroke-width:${S.borderWidth};cursor:pointer;transition:opacity .15s,fill .25s;}
+.area:hover{opacity:.82;}
+.area.dimmed{opacity:.1;}
+${S.highlights.length ? buildHighlightCSS() : ''}
 .header{background:var(--card);border-bottom:3px solid ${accentColor};padding:20px 28px;box-shadow:0 2px 10px rgba(0,0,0,.06);}
 .header h1{font-size:1.45rem;font-weight:700;}
 .header p{font-size:.82rem;color:var(--sub);margin-top:3px;}
@@ -1990,7 +2022,7 @@ fetch(GEO_URL).then(r=>{if(!r.ok)throw new Error('HTTP '+r.status);return r.json
   mapG=svgMap.append('g');
   const tt=d3.select('#tt');
   mapG.selectAll('.area').data(geoData.features).enter().append('path')
-    .attr('class',d=>{const h=getHLStyle(d.properties[GEO_PROP]||'');return 'area'+(h&&h.style==='pulse'?' hl-pulse':'');})
+    .attr('class','area')
     .attr('d',path)
     .attr('fill',${S.vizType==='bolle' ? ( S.bolleBg==='coropletica' ? `d=>getColor(lookup(d.properties[GEO_PROP]))` : S.bolleBg==='bianco' ? `'#ffffff'` : `'#e8edf5'`) : `d=>getColor(lookup(d.properties[GEO_PROP]))`})
     .attr('stroke',d=>getHL(d)||'${S.borderColor}')
@@ -2066,37 +2098,61 @@ function buildSliderCode(S, accentColor) {
 function buildHighlightCSS() {
   return S.highlights.map(h => {
     if (h.style === 'hatch') return `.hl-hatch-${h.id}{fill:url(#hatch-${h.id})!important;}`;
+    if (h.style === 'pulse') return `@keyframes hlPulse${h.id}{0%,100%{stroke-opacity:1;stroke-width:${S.borderWidth||0.5}}50%{stroke-opacity:.2;stroke-width:4}}.hl-pulse-${h.id}{animation:hlPulse${h.id} 1.8s ease-in-out infinite;}`;
     return '';
   }).join('');
 }
 
 function buildHighlightCode() {
   if (!S.highlights.length) return '';
+
+  // Pre-calcola per ogni gruppo le chiavi (in maiuscolo) da evidenziare
+  const {provinces, values} = S.data;
+  const dataObj = {};
+  provinces.forEach((p,i) => { dataObj[p.toUpperCase()] = values[i]; });
+  const sortedByVal = Object.entries(dataObj).sort((a,b) => b[1]-a[1]);
+
   return S.highlights.map(h => {
     const hid = h.id;
-    const col = h.color;
-    const n = h.n;
-    const type = h.type;
+    const col = JSON.stringify(h.color);
     const style = h.style;
-    // Filtro: seleziona le aree del gruppo
-    const filterExpr = `d=>{const hs=getHLStyle(d.properties[GEO_PROP]||'');return hs&&hs.id===${hid};}`;
+    const n = Number(h.n);
+
+    // Calcola le chiavi target nel builder (JS, non nel browser)
+    let targetKeys = [];
+    if (h.type === 'top') targetKeys = sortedByVal.slice(0, n).map(([k]) => k);
+    else if (h.type === 'bottom') targetKeys = sortedByVal.slice(-n).map(([k]) => k);
+    else if (h.type === 'middle') {
+      const mid = Math.floor(sortedByVal.length/2);
+      const half = Math.floor(n/2);
+      targetKeys = sortedByVal.slice(Math.max(0,mid-half), mid+half).map(([k]) => k);
+    } else if (h.type === 'above') targetKeys = sortedByVal.filter(([,v]) => v >= n).map(([k]) => k);
+    else if (h.type === 'below') targetKeys = sortedByVal.filter(([,v]) => v <= n).map(([k]) => k);
+
+    if (!targetKeys.length) return `/* HL group ${hid}: no matching keys */`;
+
+    // Serializza le chiavi target direttamente nel codice generato
+    const keysJSON = JSON.stringify(targetKeys);
+    const filterFn = `d=>{const n=(d.properties[GEO_PROP]||'').toUpperCase();return ${keysJSON}.some(k=>k===n||n.includes(k)||k.includes(n));}`;
+
     if (style === 'border') {
-      return `mapG.selectAll('.area').filter(${filterExpr}).attr('stroke','${col}').attr('stroke-width',3);`;
+      return `mapG.selectAll('.area').filter(${filterFn}).attr('stroke',${col}).attr('stroke-width',3).raise();`;
     }
     if (style === 'hatch') {
       return `
 (function(){
   const defs=svgMap.select('defs').empty()?svgMap.append('defs'):svgMap.select('defs');
-  defs.append('pattern').attr('id','hatch-${hid}').attr('patternUnits','userSpaceOnUse').attr('width',6).attr('height',6)
-    .append('path').attr('d','M-1,1 l2,-2 M0,6 l6,-6 M5,7 l2,-2').attr('stroke','${col}').attr('stroke-width',1.5);
-  mapG.selectAll('.area').filter(${filterExpr}).attr('fill','url(#hatch-${hid})').attr('stroke','${col}').attr('stroke-width',1.5);
+  defs.append('pattern').attr('id','hatch-${hid}').attr('patternUnits','userSpaceOnUse').attr('width',7).attr('height',7)
+    .append('path').attr('d','M-1,1 l2,-2 M0,7 l7,-7 M6,8 l2,-2').attr('stroke',${col}).attr('stroke-width',1.5);
+  mapG.selectAll('.area').filter(${filterFn})
+    .attr('fill','url(#hatch-${hid})').attr('stroke',${col}).attr('stroke-width',2).raise();
 })();`;
     }
     if (style === 'pulse') {
-      return `mapG.selectAll('.area').filter(${filterExpr}).attr('stroke','${col}').attr('stroke-width',3).classed('hl-pulse',true);`;
+      return `mapG.selectAll('.area').filter(${filterFn}).classed('hl-pulse-${hid}',true).attr('stroke',${col}).attr('stroke-width',3).raise();`;
     }
     if (style === 'bright') {
-      return `mapG.selectAll('.area').filter(${filterExpr}).style('filter','brightness(1.4) saturate(1.3)').attr('stroke','${col}').attr('stroke-width',2);`;
+      return `mapG.selectAll('.area').filter(${filterFn}).style('filter','brightness(1.5) saturate(1.4)').attr('stroke',${col}).attr('stroke-width',2.5).raise();`;
     }
     return '';
   }).join('\n');
