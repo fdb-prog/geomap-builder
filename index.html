@@ -1860,9 +1860,10 @@ function switchData(n){
     const {c,areaW,areaH,fs,tc,validLines,textW,textH,ix,iy}=item;
     const forceLeader=${S.lblPos === 'leader' ? 'true' : 'false'};
 
-    // Decide se inline è possibile: non forza leader, testo entra nella provincia, nessuna sovrapposizione
-    const fitsInside=textW<areaW*0.88 && textH<areaH*0.85;
-    const inlineFree=!forceLeader && fitsInside && !overlaps(ix,iy,textW,textH);
+    // Inline solo se la provincia è chiaramente grande abbastanza da contenere il testo
+    // con ampio margine — così solo le province grandi restano inline
+    const fitsInside = textW < areaW * 0.60 && textH < areaH * 0.60;
+    const inlineFree = !forceLeader && fitsInside && !overlaps(ix,iy,textW,textH);
 
     if(inlineFree){
       // ── INLINE ──
