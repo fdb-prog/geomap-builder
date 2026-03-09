@@ -1600,7 +1600,7 @@ function buildHTML() {
     const ip  = parseInt(document.getElementById('selProv').value);
     const iv  = parseInt(document.getElementById('selVal').value);
     col2Label = S._rawHeaders[iv2] || 'Valore 2';
-    const col1Label = S._rawHeaders[iv] || 'Valore 1';
+    const _col1Tmp = S._rawHeaders[iv] || 'Valore 1';
     if (iv2 !== iv) {
       DATA_OBJ2 = {};
       S._rawRows.forEach(r => {
