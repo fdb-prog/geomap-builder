@@ -1749,19 +1749,23 @@ const DATA2=${JSON.stringify(DATA_OBJ2)};
 const norm2=Object.fromEntries(Object.entries(DATA2).map(([k,v])=>[k.toUpperCase().trim(),v]));
 function lookup2(name){if(!name)return null;const u=name.toUpperCase().trim();if(EXCL.has(u))return null;if(norm2[u]!==undefined)return norm2[u];const syn=SYNONYMS[name]||SYNONYMS[u];if(syn&&norm2[syn.toUpperCase()]!==undefined)return norm2[syn.toUpperCase()];for(const[k,v]of Object.entries(norm2)){if(u.includes(k)||k.includes(u))return v;}return null;}
 let activeDataset=1;
+function makeColorScale(vals){
+  const mn=Math.max(1,Math.min(...vals)),mx=Math.max(...vals);
+  ${S.vizType==='step' ? `return colorScale;` :
+    S.scala==='logaritmica' ? `return d3.scaleSequentialLog().domain([mn,mx]).interpolator(${interp});` :
+    S.scala==='quantili' ? `return d3.scaleQuantile().domain(vals).range(d3.quantize(${interp},${S.quantileN || 5}));` :
+    `return d3.scaleSequential().domain([mn,mx]).interpolator(${interp});`}
+}
+function getColor2(v){if(v===null)return'#cccccc';const sc=makeColorScale(Object.values(DATA2).filter(x=>x!==null));return sc(Math.max(1,v));}
 function switchData(n){
   activeDataset=n;
-  const lkp=n===1?lookup:lookup2;
-  const allVn=Object.values(n===1?DATA:DATA2);
-  const mn=Math.max(1,Math.min(...allVn)),mx=Math.max(...allVn);
-  ${S.scala==='logaritmica'?`colorScale.domain([mn,mx]);`:`colorScale.domain([mn,mx]);`}
-  mapG.selectAll('.area').attr('fill',d=>getColor(lkp(d.properties[GEO_PROP])));
-  document.getElementById('sw1').style.background=n===1?'${accentColor}':'var(--card)';
-  document.getElementById('sw1').style.color=n===1?'#fff':'var(--sub)';
-  document.getElementById('sw1').style.border=n===1?'none':'1px solid var(--border)';
-  document.getElementById('sw2').style.background=n===2?'${accentColor}':'var(--card)';
-  document.getElementById('sw2').style.color=n===2?'#fff':'var(--sub)';
-  document.getElementById('sw2').style.border=n===2?'none':'1px solid var(--border)';
+  if(n===1){
+    mapG.selectAll('.area').attr('fill',d=>getColor(lookup(d.properties[GEO_PROP])));
+  } else {
+    mapG.selectAll('.area').attr('fill',d=>getColor2(lookup2(d.properties[GEO_PROP])));
+  }
+  document.getElementById('sw1').style.cssText=n===1?'padding:5px 10px;border-radius:6px;border:none;background:${accentColor};color:#fff;font-family:inherit;font-size:.75rem;font-weight:700;cursor:pointer;':'padding:5px 10px;border-radius:6px;border:1px solid var(--border);background:var(--card);color:var(--sub);font-family:inherit;font-size:.75rem;font-weight:600;cursor:pointer;';
+  document.getElementById('sw2').style.cssText=n===2?'padding:5px 10px;border-radius:6px;border:none;background:${accentColor};color:#fff;font-family:inherit;font-size:.75rem;font-weight:700;cursor:pointer;':'padding:5px 10px;border-radius:6px;border:1px solid var(--border);background:var(--card);color:var(--sub);font-family:inherit;font-size:.75rem;font-weight:600;cursor:pointer;';
 }` : '';
   const exportScript = S.exportpng ? `<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"><\/script>` : '';
   const exportCode = S.exportpng ? `function exportPNG(){html2canvas(document.getElementById('map-container'),{backgroundColor:getComputedStyle(document.documentElement).getPropertyValue('--card').trim()||'#fff',scale:2,useCORS:true}).then(c=>{const a=document.createElement('a');a.download='${(S.title||'mappa').replace(/[^a-z0-9]/gi,'_')}.png';a.href=c.toDataURL();a.click();});}` : '';
@@ -1771,10 +1775,10 @@ function switchData(n){
   const animCSS = S.animation ? `@keyframes fadeInProv{from{opacity:0}to{opacity:1}}.area{animation:fadeInProv .5s ease forwards;opacity:0;}` : '';
   const animCode = S.animation ? `mapG.selectAll('.area').style('animation-delay',(d,i)=>i*1.5+'ms');` : '';
 
-  // Leader lines label code — FIX 4: angolo calcolato dal centroide verso l'esterno del SVG
+  // Leader lines label code — sistema a gomito ortogonale
   const labelCode = (S.lblVal || S.lblNome) ? `
   const labG=svgMap.append('g').attr('pointer-events','none');
-  ${shadowFilter ? `svgMap.append('defs').html('${shadowFilter}');` : ''}
+  ${shadowFilter ? `(function(){const defs=svgMap.select('defs').empty()?svgMap.append('defs'):svgMap.select('defs');defs.html(defs.html()+'${shadowFilter.replace(/'/g,"\\'")}');})();` : ''}
   geoData.features.forEach(feat=>{
     const name=feat.properties[GEO_PROP]||'';
     const v=lookup(name);
@@ -1787,32 +1791,49 @@ function switchData(n){
     const t=(v!==null&&maxVal>minVal)?(${S.scala==='logaritmica'?`Math.log(Math.max(1,v)/Math.max(1,minVal))/Math.log(Math.max(2,maxVal/Math.max(1,minVal)))`:S.scala==='quantili'?'0.5':`(v-minVal)/Math.max(1,maxVal-minVal)`}):0;
     const tc=${lblColorCode};
     const lines=[];
-    ${S.lblNome ? `lines.push(name.length>8?name.slice(0,7)+'…':name);` : ''}
+    ${S.lblNome ? `lines.push(name.length>9?name.slice(0,8)+'…':name);` : ''}
     ${S.lblVal ? `lines.push(v!==null?fmt(v):'');` : ''}
     const validLines=lines.filter(Boolean);
     if(!validLines.length)return;
     const maxChars=validLines.reduce((mx,l)=>Math.max(mx,l.length),0);
     const textW=maxChars*fs*0.62;
-    const useLeader=${S.lblPos === 'leader' ? 'true' : 'false'} && (textW>areaW*0.9 || areaW<18);
+    const useLeader=${S.lblPos === 'leader' ? 'true' : 'false'} && (textW>areaW*0.85 || areaW<20 || areaH<14);
     if(useLeader){
-      // Angolo: dal centroide verso il bordo più vicino del SVG
-      const ang=Math.atan2(c[1]-H/2, c[0]-W/2);
-      const dist=Math.max(areaW,areaH)*0.6+20;
-      const tx=c[0]+Math.cos(ang)*dist;
-      const ty=c[1]+Math.sin(ang)*dist;
-      const anchor=tx>W/2?'end':'start';
-      labG.append('line').attr('x1',c[0]).attr('y1',c[1]).attr('x2',tx).attr('y2',ty)
-        .attr('stroke','#888').attr('stroke-width',.6);
-      labG.append('circle').attr('cx',c[0]).attr('cy',c[1]).attr('r',1.8).attr('fill','#888');
+      // Sistema a gomito: determina il lato più vicino al bordo SVG
+      const dLeft=c[0];
+      const dRight=W-c[0];
+      const dTop=c[1];
+      const dBot=H-c[1];
+      const minDist=Math.min(dLeft,dRight,dTop,dBot);
+      let ex,ey,anchor;
+      const step1=Math.max(areaW,areaH)*0.5+10;
+      const step2=textW+8;
+      if(minDist===dLeft||dLeft<dRight*0.6){
+        // gomito verso sinistra
+        ex=Math.max(4,c[0]-step1-step2); ey=c[1]; anchor='end';
+      } else {
+        // gomito verso destra
+        ex=Math.min(W-4,c[0]+step1+step2); ey=c[1]; anchor='start';
+      }
+      const midX=anchor==='end'?c[0]-step1:c[0]+step1;
+      // linea spezzata: centroide → punto orizzontale → punto testo
+      labG.append('polyline')
+        .attr('points',\`\${c[0]},\${c[1]} \${midX},\${c[1]} \${midX},\${ey}\`)
+        .attr('stroke','rgba(120,130,150,0.7)').attr('stroke-width',.7)
+        .attr('fill','none').attr('stroke-dasharray','none');
+      labG.append('circle').attr('cx',c[0]).attr('cy',c[1]).attr('r',2).attr('fill','rgba(120,130,150,0.8)');
+      // sfondo testo
+      const bx=anchor==='start'?midX+2:midX-textW-4;
+      labG.append('rect').attr('x',bx).attr('y',ey-(validLines.length*fs*1.25)/2-2)
+        .attr('width',textW+4).attr('height',validLines.length*fs*1.25+4)
+        .attr('rx',2).attr('fill','rgba(255,255,255,0.82)');
       validLines.forEach((l,li)=>{
         const el=labG.append('text')
-          .attr('x',tx+(anchor==='start'?3:-3))
-          .attr('y',ty+(li-(validLines.length-1)/2)*fs*1.3)
-          .attr('text-anchor',anchor)
-          .attr('dominant-baseline','middle')
-          .attr('font-size',fs).attr('fill',tc).text(l);
+          .attr('x',anchor==='start'?midX+4:midX-4)
+          .attr('y',ey+(li-(validLines.length-1)/2)*fs*1.3)
+          .attr('text-anchor',anchor).attr('dominant-baseline','middle')
+          .attr('font-size',fs).attr('fill','#222').text(l);
         ${S.lblBold ? `el.attr('font-weight','700');` : ''}
-        ${S.lblShadow ? `el.attr('filter','url(#lbl-shadow)');` : ''}
       });
     } else {
       ${bgRect}
@@ -1930,9 +1951,25 @@ ${stepSetupCode}
 ${S.vizType === 'step' ? `const colorScale=${scaleCode};function getColor(v){return colorScale(v);}` :
   `const colorScale=${scaleCode};function getColor(v){if(v===null)return'#cccccc';return colorScale(${S.scala==='quantili'?'v':`Math.max(minVal,v)`});}`}
 // Highlights
-const HIGHLIGHTS=${JSON.stringify(S.highlights)};
-const sorted_keys=Object.entries(DATA).sort((a,b)=>b[1]-a[1]).map(([k])=>k);
-function getHLStyle(name){const u=name.toUpperCase();for(const h of HIGHLIGHTS){let keys=[];if(h.type==='top')keys=sorted_keys.slice(0,h.n);else if(h.type==='bottom')keys=sorted_keys.slice(-h.n);else if(h.type==='middle'){const mid=Math.floor(sorted_keys.length/2);const half=Math.floor(h.n/2);keys=sorted_keys.slice(mid-half,mid+half);}else if(h.type==='above')keys=Object.entries(DATA).filter(([,v])=>v>=h.n).map(([k])=>k);else if(h.type==='below')keys=Object.entries(DATA).filter(([,v])=>v<=h.n).map(([k])=>k);if(keys.map(k=>k.toUpperCase()).includes(u))return h;}return null;}
+const HIGHLIGHTS=${JSON.stringify(S.highlights.map(h=>({...h, n: Number(h.n)})))};
+const sorted_keys=Object.entries(DATA).sort((a,b)=>b[1]-a[1]).map(([k])=>k.toUpperCase());
+function getHLStyle(rawName){
+  if(!rawName)return null;
+  const u=rawName.toUpperCase().trim();
+  for(const h of HIGHLIGHTS){
+    let keys=[];
+    const hn=Number(h.n);
+    if(h.type==='top') keys=sorted_keys.slice(0,hn);
+    else if(h.type==='bottom') keys=sorted_keys.slice(-hn);
+    else if(h.type==='middle'){const mid=Math.floor(sorted_keys.length/2);const half=Math.floor(hn/2);keys=sorted_keys.slice(Math.max(0,mid-half),mid+half);}
+    else if(h.type==='above') keys=Object.entries(DATA).filter(([,v])=>v>=hn).map(([k])=>k.toUpperCase());
+    else if(h.type==='below') keys=Object.entries(DATA).filter(([,v])=>v<=hn).map(([k])=>k.toUpperCase());
+    // confronto diretto, poi fuzzy (include)
+    if(keys.includes(u)) return h;
+    if(keys.some(k=>k.includes(u)||u.includes(k))) return h;
+  }
+  return null;
+}
 function getHL(d){const h=getHLStyle(d.properties[GEO_PROP]||'');return h?h.color:null;}
 function getHLWidth(d){const h=getHLStyle(d.properties[GEO_PROP]||'');return h&&(h.style==='border')?2.5:null;}
 // Legenda gradiente continuo
@@ -1958,8 +1995,27 @@ fetch(GEO_URL).then(r=>{if(!r.ok)throw new Error('HTTP '+r.status);return r.json
     .attr('fill',${S.vizType==='bolle' ? ( S.bolleBg==='coropletica' ? `d=>getColor(lookup(d.properties[GEO_PROP]))` : S.bolleBg==='bianco' ? `'#ffffff'` : `'#e8edf5'`) : `d=>getColor(lookup(d.properties[GEO_PROP]))`})
     .attr('stroke',d=>getHL(d)||'${S.borderColor}')
     .attr('stroke-width',d=>getHLWidth(d)||${S.borderWidth})
-  ${S.tooltip ? `.on('mousemove',(e,d)=>{const n=d.properties[GEO_PROP]||'';const v=lookup(n);let h='<strong>'+n+'</strong>';if(v!==null){h+='<br>'+fmt(v)+'<br><span style="opacity:.7">'+((v/total)*100).toFixed(1)+'% del totale</span>';}else h+='<br><span style="color:#ffaaaa">N/D</span>';tt.style('opacity',1).style('left',(e.clientX+14)+'px').style('top',(e.clientY-8)+'px').html(h);}).on('mouseleave',()=>tt.style('opacity',0))` : ''}
-  ${S.click ? `.on('click',(e,d)=>{const n=d.properties[GEO_PROP]||'';const v=lookup(n);const rank=Object.entries(DATA).sort((a,b)=>b[1]-a[1]).findIndex(([k])=>k.toUpperCase()===n.toUpperCase())+1;document.getElementById('det-c').innerHTML='<div class="det-name">'+n+'</div><div class="det-v">'+(v!==null?fmt(v):'N/D')+'</div>'+(v!==null?'<div class="det-meta">Rank: <b>#'+rank+'</b> su '+Object.keys(DATA).length+'<br>% totale: <b>'+((v/total)*100).toFixed(1)+'%</b><br>Scarto media: <b>'+(v>=avg?'+':'')+fmt(v-avg)+'</b></div>':'');document.getElementById('det').style.display='block';e.stopPropagation();})` : ''}
+  ${S.tooltip ? `.on('mousemove',(e,d)=>{
+      const n=d.properties[GEO_PROP]||'';
+      const lkpFn=(typeof activeDataset!=='undefined'&&activeDataset===2)?lookup2:lookup;
+      const v=lkpFn(n);
+      let h='<strong>'+n+'</strong>';
+      if(v!==null){h+='<br>'+fmt(v)+'<br><span style="opacity:.7">'+((v/total)*100).toFixed(1)+'% del totale</span>';}
+      else h+='<br><span style="color:#ffaaaa">N/D</span>';
+      tt.style('opacity',1).style('left',(e.clientX+14)+'px').style('top',(e.clientY-8)+'px').html(h);
+    }).on('mouseleave',()=>tt.style('opacity',0))` : ''}
+  ${S.click ? `.on('click',(e,d)=>{
+      const n=d.properties[GEO_PROP]||'';
+      const lkpFn=(typeof activeDataset!=='undefined'&&activeDataset===2)?lookup2:lookup;
+      const v=lkpFn(n);
+      const dataActive=(typeof activeDataset!=='undefined'&&activeDataset===2)?DATA2:DATA;
+      const rank=Object.entries(dataActive).sort((a,b)=>b[1]-a[1]).findIndex(([k])=>k.toUpperCase()===n.toUpperCase())+1;
+      const tot=Object.values(dataActive).reduce((a,b)=>a+b,0);
+      const av=Math.round(tot/Object.keys(dataActive).length);
+      document.getElementById('det-c').innerHTML='<div class="det-name">'+n+'</div><div class="det-v">'+(v!==null?fmt(v):'N/D')+'</div>'+(v!==null?'<div class="det-meta">Rank: <b>#'+rank+'</b> su '+Object.keys(dataActive).length+'<br>% totale: <b>'+((v/tot)*100).toFixed(1)+'%</b><br>Scarto media: <b>'+(v>=av?'+':'')+fmt(v-av)+'</b></div>':'');
+      document.getElementById('det').style.display='block';
+      e.stopPropagation();
+    })` : ''}
   ;
   ${S.vizType === 'bolle' ? `
   // ── BOLLE PROPORZIONALI ──
