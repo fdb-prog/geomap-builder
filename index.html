@@ -1737,6 +1737,7 @@ function doSearch(q){
 
   // FIX 2: Switch dati HTML e JS
   const col1Label = S._rawHeaders ? (S._rawHeaders[parseInt(document.getElementById('selVal').value)] || 'Valore 1') : 'Valore 1';
+  const hasLabels = !!(S.lblVal || S.lblNome);
   const switchHTML = (S.compare && DATA_OBJ2) ? `
 <div style="display:flex;gap:6px;align-items:center;background:var(--card);border:1px solid var(--border);border-radius:8px;padding:4px 6px;">
   <span style="font-size:.72rem;color:var(--sub);font-weight:600;">Switch:</span>
@@ -1778,7 +1779,6 @@ function switchData(n){
   const animCode = S.animation ? `mapG.selectAll('.area').style('animation-delay',(d,i)=>i*1.5+'ms');` : '';
 
   // Leader lines — funzione drawLabels() richiamabile anche dallo switch dati
-  const hasLabels = S.lblVal || S.lblNome;
   const labelCode = hasLabels ? `
   let labG=svgMap.append('g').attr('pointer-events','none').attr('id','lab-g');
   ${shadowFilter ? `(function(){const defs=svgMap.select('defs').empty()?svgMap.append('defs'):svgMap.select('defs');defs.append('filter').attr('id','lbl-shadow').html('<feDropShadow dx="0" dy="0" stdDeviation="1.5" flood-color="rgba(0,0,0,0.8)"/>');})();` : ''}
