@@ -1,0 +1,1532 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GeoMap Builder — Mappe Province Italiane</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg: #0e0f14;
+  --surface: #16181f;
+  --surface2: #1e2029;
+  --border: #2a2d3a;
+  --border2: #353848;
+  --accent: #4ade80;
+  --accent2: #22c55e;
+  --accent-dim: rgba(74,222,128,0.12);
+  --accent-dim2: rgba(74,222,128,0.06);
+  --text: #e8eaf0;
+  --text2: #9095a8;
+  --text3: #5a5f72;
+  --red: #f87171;
+  --yellow: #fbbf24;
+  --blue: #60a5fa;
+  --font: 'DM Sans', sans-serif;
+  --mono: 'DM Mono', monospace;
+  --radius: 12px;
+  --radius-sm: 8px;
+}
+
+html { scroll-behavior: smooth; }
+
+body {
+  font-family: var(--font);
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  line-height: 1.6;
+}
+
+/* SCROLLBAR */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
+
+/* ── HEADER ─────────────────────────────────────────────── */
+.app-header {
+  padding: 28px 40px 24px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  position: sticky;
+  top: 0;
+  background: rgba(14,15,20,0.92);
+  backdrop-filter: blur(12px);
+  z-index: 100;
+}
+.logo {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.logo-icon {
+  width: 36px; height: 36px;
+  background: var(--accent-dim);
+  border: 1px solid rgba(74,222,128,0.3);
+  border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 18px;
+}
+.logo-text h1 {
+  font-size: 1.05rem;
+  font-weight: 600;
+  letter-spacing: -0.3px;
+  color: var(--text);
+}
+.logo-text p {
+  font-size: 0.72rem;
+  color: var(--text3);
+  margin-top: 1px;
+}
+.header-badge {
+  font-size: 0.72rem;
+  font-family: var(--mono);
+  color: var(--accent);
+  background: var(--accent-dim);
+  border: 1px solid rgba(74,222,128,0.2);
+  padding: 4px 10px;
+  border-radius: 20px;
+}
+
+/* ── LAYOUT ─────────────────────────────────────────────── */
+.app-layout {
+  display: grid;
+  grid-template-columns: 420px 1fr;
+  min-height: calc(100vh - 85px);
+}
+@media (max-width: 900px) {
+  .app-layout { grid-template-columns: 1fr; }
+  .app-header { padding: 18px 20px; }
+}
+
+/* ── SIDEBAR ─────────────────────────────────────────────── */
+.sidebar {
+  border-right: 1px solid var(--border);
+  padding: 28px 24px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* ── SECTION ─────────────────────────────────────────────── */
+.section {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  transition: border-color 0.2s;
+}
+.section.open { border-color: var(--border2); }
+.section.active { border-color: rgba(74,222,128,0.35); }
+
+.section-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 13px 16px;
+  cursor: pointer;
+  background: var(--surface);
+  user-select: none;
+  transition: background 0.15s;
+}
+.section-header:hover { background: var(--surface2); }
+.section-num {
+  width: 22px; height: 22px;
+  border-radius: 6px;
+  background: var(--surface2);
+  border: 1px solid var(--border2);
+  font-size: 0.7rem;
+  font-weight: 700;
+  font-family: var(--mono);
+  color: var(--text3);
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+  transition: all 0.2s;
+}
+.section.active .section-num {
+  background: var(--accent-dim);
+  border-color: rgba(74,222,128,0.4);
+  color: var(--accent);
+}
+.section.done .section-num {
+  background: rgba(74,222,128,0.15);
+  border-color: rgba(74,222,128,0.3);
+  color: var(--accent);
+}
+.section-title {
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--text);
+  flex: 1;
+}
+.section-summary {
+  font-size: 0.72rem;
+  color: var(--text3);
+  font-family: var(--mono);
+  max-width: 120px;
+  text-overflow: ellipsis;
+  overflow: hidden;
+  white-space: nowrap;
+}
+.section-chevron {
+  color: var(--text3);
+  font-size: 0.75rem;
+  transition: transform 0.2s;
+}
+.section.open .section-chevron { transform: rotate(180deg); }
+
+.section-body {
+  display: none;
+  padding: 16px;
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+}
+.section.open .section-body { display: block; }
+
+/* ── FILE DROP ───────────────────────────────────────────── */
+.file-drop {
+  border: 2px dashed var(--border2);
+  border-radius: var(--radius);
+  padding: 28px 20px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.2s;
+  position: relative;
+}
+.file-drop:hover, .file-drop.drag { border-color: var(--accent); background: var(--accent-dim2); }
+.file-drop input { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; }
+.file-icon { font-size: 2rem; margin-bottom: 8px; }
+.file-label { font-size: 0.85rem; color: var(--text2); }
+.file-label strong { color: var(--accent); }
+.file-meta { font-size: 0.72rem; color: var(--text3); margin-top: 4px; font-family: var(--mono); }
+
+.file-loaded {
+  background: var(--accent-dim2);
+  border: 1px solid rgba(74,222,128,0.25);
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+  margin-top: 12px;
+  display: none;
+}
+.file-loaded.show { display: block; }
+.file-loaded-name { font-size: 0.82rem; font-weight: 600; color: var(--accent); }
+.file-loaded-stats { font-size: 0.72rem; color: var(--text3); margin-top: 3px; font-family: var(--mono); }
+
+.col-selector { margin-top: 12px; display: none; }
+.col-selector.show { display: block; }
+
+/* ── CONTROLS ────────────────────────────────────────────── */
+label.field-label {
+  display: block;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text3);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 6px;
+}
+
+.radio-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.radio-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  cursor: pointer;
+  transition: all 0.15s;
+  background: var(--surface2);
+}
+.radio-item:hover { border-color: var(--border2); }
+.radio-item.selected {
+  border-color: rgba(74,222,128,0.4);
+  background: var(--accent-dim);
+}
+.radio-item input { display: none; }
+.radio-dot {
+  width: 14px; height: 14px;
+  border-radius: 50%;
+  border: 2px solid var(--border2);
+  flex-shrink: 0;
+  transition: all 0.15s;
+  display: flex; align-items: center; justify-content: center;
+}
+.radio-item.selected .radio-dot {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+.radio-item.selected .radio-dot::after {
+  content: '';
+  width: 5px; height: 5px;
+  border-radius: 50%;
+  background: var(--bg);
+}
+.radio-text { font-size: 0.82rem; color: var(--text); }
+.radio-desc { font-size: 0.7rem; color: var(--text3); margin-top: 1px; }
+
+.check-group { display: flex; flex-direction: column; gap: 6px; }
+.check-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  cursor: pointer;
+  transition: all 0.15s;
+  background: var(--surface2);
+}
+.check-item:hover { border-color: var(--border2); }
+.check-item.selected {
+  border-color: rgba(74,222,128,0.4);
+  background: var(--accent-dim);
+}
+.check-box {
+  width: 14px; height: 14px;
+  border-radius: 4px;
+  border: 2px solid var(--border2);
+  flex-shrink: 0;
+  transition: all 0.15s;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 9px; color: transparent;
+}
+.check-item.selected .check-box {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--bg);
+}
+
+/* PALETTE SWATCHES */
+.palette-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 7px;
+}
+.palette-item {
+  border: 2px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  cursor: pointer;
+  transition: all 0.15s;
+  background: var(--surface2);
+}
+.palette-item:hover { border-color: var(--border2); }
+.palette-item.selected { border-color: rgba(74,222,128,0.5); }
+.palette-bar {
+  height: 8px;
+  border-radius: 4px;
+  margin-bottom: 5px;
+}
+.palette-name { font-size: 0.7rem; color: var(--text2); }
+
+/* INPUT */
+input[type=text], input[type=number], select {
+  width: 100%;
+  background: var(--surface2);
+  border: 1px solid var(--border2);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 0.83rem;
+  padding: 9px 12px;
+  outline: none;
+  transition: border-color 0.15s;
+}
+input[type=text]:focus, input[type=number]:focus, select:focus {
+  border-color: rgba(74,222,128,0.5);
+}
+select option { background: var(--surface2); }
+
+.field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px; }
+.field-group { margin-top: 12px; }
+
+/* SCALE HINT */
+.hint-box {
+  background: rgba(251,191,36,0.08);
+  border: 1px solid rgba(251,191,36,0.2);
+  border-radius: var(--radius-sm);
+  padding: 8px 12px;
+  font-size: 0.75rem;
+  color: var(--yellow);
+  margin-top: 8px;
+  display: none;
+}
+.hint-box.show { display: block; }
+
+/* ── GENERATE BUTTON ─────────────────────────────────────── */
+.generate-wrap {
+  padding: 20px 24px;
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+  position: sticky;
+  bottom: 0;
+}
+.btn-generate {
+  width: 100%;
+  padding: 14px;
+  background: var(--accent);
+  color: #0a1a0e;
+  font-family: var(--font);
+  font-size: 0.92rem;
+  font-weight: 700;
+  border: none;
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  letter-spacing: -0.2px;
+}
+.btn-generate:hover { background: #6ee79a; transform: translateY(-1px); }
+.btn-generate:active { transform: translateY(0); }
+.btn-generate:disabled {
+  background: var(--border2);
+  color: var(--text3);
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* ── MAIN AREA ───────────────────────────────────────────── */
+.main-area {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px;
+  background: var(--bg);
+  min-height: 500px;
+}
+
+.empty-state {
+  text-align: center;
+  max-width: 420px;
+}
+.empty-icon {
+  font-size: 3.5rem;
+  margin-bottom: 16px;
+  opacity: 0.4;
+}
+.empty-title {
+  font-size: 1.2rem;
+  font-weight: 600;
+  color: var(--text2);
+  margin-bottom: 8px;
+}
+.empty-desc { font-size: 0.85rem; color: var(--text3); line-height: 1.7; }
+
+.steps-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 28px;
+  text-align: left;
+  width: 100%;
+  max-width: 320px;
+}
+.step-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.8rem;
+  color: var(--text3);
+}
+.step-dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--border2);
+  flex-shrink: 0;
+}
+.step-item.active .step-dot { background: var(--accent); }
+.step-item.active { color: var(--text2); }
+
+/* RESULT AREA */
+.result-area { display: none; width: 100%; max-width: 700px; }
+.result-area.show { display: block; }
+
+.result-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  overflow: hidden;
+}
+.result-header {
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.result-title {
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+.result-meta {
+  font-size: 0.75rem;
+  color: var(--text3);
+  font-family: var(--mono);
+  margin-top: 3px;
+}
+.result-actions { display: flex; gap: 8px; }
+
+.btn {
+  padding: 8px 16px;
+  border-radius: var(--radius-sm);
+  font-family: var(--font);
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  border: none;
+  transition: all 0.15s;
+}
+.btn-primary {
+  background: var(--accent);
+  color: #0a1a0e;
+}
+.btn-primary:hover { background: #6ee79a; }
+.btn-secondary {
+  background: var(--surface2);
+  color: var(--text2);
+  border: 1px solid var(--border2);
+}
+.btn-secondary:hover { border-color: var(--accent); color: var(--accent); }
+
+/* PREVIEW */
+.map-preview {
+  padding: 20px 24px;
+  background: var(--bg);
+  min-height: 380px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-bottom: 1px solid var(--border);
+}
+.map-preview iframe {
+  width: 100%;
+  height: 400px;
+  border: none;
+  border-radius: 8px;
+}
+
+/* CONFIG SUMMARY */
+.config-summary {
+  padding: 16px 24px;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+}
+.cfg-item {}
+.cfg-label { font-size: 0.68rem; color: var(--text3); text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600; margin-bottom: 3px; }
+.cfg-value { font-size: 0.8rem; color: var(--text2); font-family: var(--mono); }
+
+/* PROGRESS */
+.progress-bar {
+  height: 2px;
+  background: var(--border);
+  border-radius: 1px;
+  margin-top: 12px;
+  overflow: hidden;
+}
+.progress-fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 1px;
+  width: 0%;
+  transition: width 0.4s ease;
+}
+
+/* TOAST */
+.toast {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  background: var(--surface2);
+  border: 1px solid var(--border2);
+  border-radius: var(--radius);
+  padding: 12px 18px;
+  font-size: 0.82rem;
+  color: var(--text);
+  z-index: 9999;
+  transform: translateY(20px);
+  opacity: 0;
+  transition: all 0.3s;
+  max-width: 300px;
+}
+.toast.show { transform: translateY(0); opacity: 1; }
+.toast.success { border-color: rgba(74,222,128,0.4); }
+.toast.error { border-color: rgba(248,113,113,0.4); }
+
+/* FIELDSET gap */
+.fields-stack { display: flex; flex-direction: column; gap: 14px; }
+
+/* COLOR custom row */
+.color-custom { display: none; gap: 8px; margin-top: 8px; }
+.color-custom.show { display: flex; }
+.color-swatch {
+  width: 36px; height: 36px;
+  border-radius: var(--radius-sm);
+  border: 2px solid var(--border2);
+  cursor: pointer;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.color-swatch input { width: 200%; height: 200%; margin: -50%; cursor: pointer; border: none; background: none; }
+
+.divider {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 14px 0;
+}
+
+/* LOADING OVERLAY */
+.generating-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(14,15,20,0.8);
+  backdrop-filter: blur(6px);
+  z-index: 500;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 16px;
+}
+.generating-overlay.show { display: flex; }
+.gen-spinner {
+  width: 48px; height: 48px;
+  border: 3px solid var(--border2);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.gen-text { font-size: 0.9rem; color: var(--text2); }
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<header class="app-header">
+  <div class="logo">
+    <div class="logo-icon">🗺️</div>
+    <div class="logo-text">
+      <h1>GeoMap Builder</h1>
+      <p>Mappe coropletiche province italiane</p>
+    </div>
+  </div>
+  <span class="header-badge">v1.0 · 100% browser</span>
+</header>
+
+<!-- LAYOUT -->
+<div class="app-layout">
+
+  <!-- SIDEBAR -->
+  <aside class="sidebar" id="sidebar">
+
+    <!-- SEZIONE 1: FILE -->
+    <div class="section open active" id="sec1">
+      <div class="section-header" onclick="toggleSection('sec1')">
+        <span class="section-num">1</span>
+        <span class="section-title">Carica i tuoi dati</span>
+        <span class="section-summary" id="sum1">—</span>
+        <span class="section-chevron">▼</span>
+      </div>
+      <div class="section-body">
+        <div class="file-drop" id="fileDrop">
+          <input type="file" id="fileInput" accept=".xlsx,.xls,.csv" onchange="handleFile(this.files[0])">
+          <div class="file-icon">📂</div>
+          <div class="file-label"><strong>Clicca o trascina</strong> il tuo file</div>
+          <div class="file-meta">Excel (.xlsx, .xls) o CSV</div>
+        </div>
+        <div class="file-loaded" id="fileLoaded">
+          <div class="file-loaded-name" id="fileName">—</div>
+          <div class="file-loaded-stats" id="fileStats">—</div>
+        </div>
+        <div class="col-selector" id="colSelector">
+          <div class="field-group">
+            <label class="field-label">Colonna province</label>
+            <select id="colProvince" onchange="updatePreview()"></select>
+          </div>
+          <div class="field-group">
+            <label class="field-label">Colonna valore</label>
+            <select id="colValue" onchange="updatePreview()"></select>
+          </div>
+          <div class="hint-box" id="logHint">
+            ⚠️ Scala logaritmica consigliata — il rapporto max/min supera 50x
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SEZIONE 2: TERRITORIO -->
+    <div class="section" id="sec2">
+      <div class="section-header" onclick="toggleSection('sec2')">
+        <span class="section-num">2</span>
+        <span class="section-title">Territorio</span>
+        <span class="section-summary" id="sum2">Province</span>
+        <span class="section-chevron">▼</span>
+      </div>
+      <div class="section-body">
+        <div class="radio-group">
+          <label class="radio-item selected" onclick="selectRadio(this,'territory','province')">
+            <input type="radio" name="territory" value="province" checked>
+            <span class="radio-dot"></span>
+            <div><div class="radio-text">🗾 Province (107)</div><div class="radio-desc">Mappa di tutte le province italiane</div></div>
+          </label>
+          <label class="radio-item" onclick="selectRadio(this,'territory','regioni')">
+            <input type="radio" name="territory" value="regioni">
+            <span class="radio-dot"></span>
+            <div><div class="radio-text">🏛 Regioni (20)</div><div class="radio-desc">Mappa delle regioni italiane</div></div>
+          </label>
+          <label class="radio-item" onclick="selectRadio(this,'territory','europa')">
+            <input type="radio" name="territory" value="europa">
+            <span class="radio-dot"></span>
+            <div><div class="radio-text">🌍 Europa (nazioni)</div><div class="radio-desc">Mappa dei paesi europei</div></div>
+          </label>
+        </div>
+      </div>
+    </div>
+
+    <!-- SEZIONE 3: VISUALIZZAZIONE -->
+    <div class="section" id="sec3">
+      <div class="section-header" onclick="toggleSection('sec3')">
+        <span class="section-num">3</span>
+        <span class="section-title">Visualizzazione</span>
+        <span class="section-summary" id="sum3">Coropletica</span>
+        <span class="section-chevron">▼</span>
+      </div>
+      <div class="section-body fields-stack">
+        <div>
+          <label class="field-label">Tipo mappa</label>
+          <div class="radio-group">
+            <label class="radio-item selected" onclick="selectRadio(this,'vizType','coropletica')">
+              <input type="radio" name="vizType" value="coropletica" checked>
+              <span class="radio-dot"></span>
+              <div><div class="radio-text">🎨 Coropletica — gradiente continuo</div></div>
+            </label>
+            <label class="radio-item" onclick="selectRadio(this,'vizType','dashboard')">
+              <input type="radio" name="vizType" value="dashboard">
+              <span class="radio-dot"></span>
+              <div><div class="radio-text">📋 Dashboard — mappa + grafici</div></div>
+            </label>
+          </div>
+        </div>
+        <div>
+          <label class="field-label">Scala valori</label>
+          <div class="radio-group">
+            <label class="radio-item" onclick="selectRadio(this,'scala','logaritmica')" id="radioLog">
+              <input type="radio" name="scala" value="logaritmica">
+              <span class="radio-dot"></span>
+              <div><div class="radio-text">Logaritmica</div><div class="radio-desc">Consigliata quando i valori variano molto</div></div>
+            </label>
+            <label class="radio-item selected" onclick="selectRadio(this,'scala','lineare')">
+              <input type="radio" name="scala" value="lineare" checked>
+              <span class="radio-dot"></span>
+              <div><div class="radio-text">Lineare</div><div class="radio-desc">Proporzionale ai valori reali</div></div>
+            </label>
+            <label class="radio-item" onclick="selectRadio(this,'scala','quantili')">
+              <input type="radio" name="scala" value="quantili">
+              <span class="radio-dot"></span>
+              <div><div class="radio-text">Quantili</div><div class="radio-desc">Divide in N gruppi di ugual numerosità</div></div>
+            </label>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SEZIONE 4: COLORI -->
+    <div class="section" id="sec4">
+      <div class="section-header" onclick="toggleSection('sec4')">
+        <span class="section-num">4</span>
+        <span class="section-title">Colori &amp; Tema</span>
+        <span class="section-summary" id="sum4">Bianco→Blu</span>
+        <span class="section-chevron">▼</span>
+      </div>
+      <div class="section-body fields-stack">
+        <div>
+          <label class="field-label">Palette colori</label>
+          <div class="palette-grid" id="paletteGrid">
+            <div class="palette-item selected" onclick="selectPalette(this,'bianco-blu')" data-palette="bianco-blu">
+              <div class="palette-bar" style="background:linear-gradient(to right,#f0f8ff,#083d7f)"></div>
+              <div class="palette-name">Bianco → Blu</div>
+            </div>
+            <div class="palette-item" onclick="selectPalette(this,'bianco-verde')" data-palette="bianco-verde">
+              <div class="palette-bar" style="background:linear-gradient(to right,#f0fff4,#1a5c2a)"></div>
+              <div class="palette-name">Bianco → Verde</div>
+            </div>
+            <div class="palette-item" onclick="selectPalette(this,'bianco-rosso')" data-palette="bianco-rosso">
+              <div class="palette-bar" style="background:linear-gradient(to right,#fff5f5,#8b0000)"></div>
+              <div class="palette-name">Bianco → Rosso</div>
+            </div>
+            <div class="palette-item" onclick="selectPalette(this,'semaforo')" data-palette="semaforo">
+              <div class="palette-bar" style="background:linear-gradient(to right,#1a9641,#ffffbf,#d7191c)"></div>
+              <div class="palette-name">Semaforo</div>
+            </div>
+            <div class="palette-item" onclick="selectPalette(this,'calore')" data-palette="calore">
+              <div class="palette-bar" style="background:linear-gradient(to right,#ffffb2,#fd8d3c,#bd0026)"></div>
+              <div class="palette-name">Calore</div>
+            </div>
+            <div class="palette-item" onclick="selectPalette(this,'personalizzata')" data-palette="personalizzata">
+              <div class="palette-bar" id="customPaletteBar" style="background:linear-gradient(to right,#ffffff,#333333)"></div>
+              <div class="palette-name">✏️ Personalizzata</div>
+            </div>
+          </div>
+          <div class="color-custom" id="colorCustom">
+            <div>
+              <div style="font-size:0.7rem;color:var(--text3);margin-bottom:4px">Colore inizio</div>
+              <div class="color-swatch"><input type="color" id="colorStart" value="#ffffff" oninput="updateCustomPalette()"></div>
+            </div>
+            <div>
+              <div style="font-size:0.7rem;color:var(--text3);margin-bottom:4px">Colore fine</div>
+              <div class="color-swatch"><input type="color" id="colorEnd" value="#333333" oninput="updateCustomPalette()"></div>
+            </div>
+          </div>
+        </div>
+        <div>
+          <label class="field-label">Tema pagina</label>
+          <div class="radio-group">
+            <label class="radio-item selected" onclick="selectRadio(this,'tema','chiaro')">
+              <input type="radio" name="tema" value="chiaro" checked>
+              <span class="radio-dot"></span>
+              <div class="radio-text">☀️ Chiaro</div>
+            </label>
+            <label class="radio-item" onclick="selectRadio(this,'tema','scuro')">
+              <input type="radio" name="tema" value="scuro">
+              <span class="radio-dot"></span>
+              <div class="radio-text">🌙 Scuro</div>
+            </label>
+            <label class="radio-item" onclick="selectRadio(this,'tema','corporate')">
+              <input type="radio" name="tema" value="corporate">
+              <span class="radio-dot"></span>
+              <div class="radio-text">🏢 Corporate (blu navy)</div>
+            </label>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SEZIONE 5: ETICHETTE & INTERATTIVITÀ -->
+    <div class="section" id="sec5">
+      <div class="section-header" onclick="toggleSection('sec5')">
+        <span class="section-num">5</span>
+        <span class="section-title">Etichette &amp; Interattività</span>
+        <span class="section-summary" id="sum5">Tooltip</span>
+        <span class="section-chevron">▼</span>
+      </div>
+      <div class="section-body fields-stack">
+        <div>
+          <label class="field-label">Etichette su mappa</label>
+          <div class="check-group">
+            <label class="check-item selected" onclick="toggleCheck(this,'label_valore')">
+              <span class="check-box">✓</span>
+              <span class="radio-text">Valore numerico</span>
+            </label>
+            <label class="check-item" onclick="toggleCheck(this,'label_nome')">
+              <span class="check-box">✓</span>
+              <span class="radio-text">Nome del territorio</span>
+            </label>
+          </div>
+        </div>
+        <div>
+          <label class="field-label">Funzioni interattive</label>
+          <div class="check-group">
+            <label class="check-item selected" onclick="toggleCheck(this,'tooltip')">
+              <span class="check-box">✓</span>
+              <span class="radio-text">Tooltip al hover</span>
+            </label>
+            <label class="check-item selected" onclick="toggleCheck(this,'click_detail')">
+              <span class="check-box">✓</span>
+              <span class="radio-text">Click per dettaglio</span>
+            </label>
+            <label class="check-item selected" onclick="toggleCheck(this,'slider')">
+              <span class="check-box">✓</span>
+              <span class="radio-text">Slider filtro valori</span>
+            </label>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SEZIONE 6: TITOLO -->
+    <div class="section" id="sec6">
+      <div class="section-header" onclick="toggleSection('sec6')">
+        <span class="section-num">6</span>
+        <span class="section-title">Titolo &amp; Metadati</span>
+        <span class="section-summary" id="sum6">—</span>
+        <span class="section-chevron">▼</span>
+      </div>
+      <div class="section-body fields-stack">
+        <div class="field-group">
+          <label class="field-label">Titolo mappa</label>
+          <input type="text" id="mapTitle" placeholder="es. Distribuzione per Provincia" oninput="updateSum6()">
+        </div>
+        <div class="field-group">
+          <label class="field-label">Fonte dati (opzionale)</label>
+          <input type="text" id="mapSource" placeholder="es. Elaborazione su dati ISTAT 2024">
+        </div>
+        <div class="field-group">
+          <label class="field-label">Font</label>
+          <select id="mapFont" onchange="updateSum6()">
+            <option value="'Inter', sans-serif">Inter (moderno)</option>
+            <option value="'Quattrocento Sans', sans-serif">Quattrocento Sans (elegante)</option>
+            <option value="'Roboto', sans-serif">Roboto (leggibile)</option>
+            <option value="'Georgia', serif">Georgia (classico)</option>
+            <option value="'DM Sans', sans-serif">DM Sans (contemporaneo)</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <!-- PROGRESS -->
+    <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+
+  </aside><!-- /sidebar -->
+
+  <!-- GENERATE BUTTON + MAIN -->
+  <div style="display:flex;flex-direction:column;">
+    <div class="generate-wrap" style="border-left:1px solid var(--border);border-bottom:1px solid var(--border);">
+      <button class="btn-generate" id="btnGenerate" onclick="generateMap()" disabled>
+        <span>⚡</span> Genera Mappa HTML
+      </button>
+    </div>
+
+    <!-- MAIN AREA -->
+    <main class="main-area" id="mainArea" style="flex:1;border-left:1px solid var(--border);">
+      <!-- EMPTY STATE -->
+      <div class="empty-state" id="emptyState">
+        <div class="empty-icon">🗺️</div>
+        <div class="empty-title">La tua mappa apparirà qui</div>
+        <div class="empty-desc">Carica un file Excel con i tuoi dati, configura le opzioni nel pannello a sinistra, poi clicca <strong style="color:var(--accent)">Genera Mappa</strong>.</div>
+        <div class="steps-preview">
+          <div class="step-item active"><span class="step-dot"></span> Carica Excel con colonna province + valori</div>
+          <div class="step-item"><span class="step-dot"></span> Scegli palette, tema e scala</div>
+          <div class="step-item"><span class="step-dot"></span> Aggiungi titolo e opzioni interattive</div>
+          <div class="step-item"><span class="step-dot"></span> Genera e scarica il file HTML</div>
+        </div>
+      </div>
+
+      <!-- RESULT -->
+      <div class="result-area" id="resultArea">
+        <div class="result-card">
+          <div class="result-header">
+            <div>
+              <div class="result-title" id="resultTitle">Mappa generata</div>
+              <div class="result-meta" id="resultMeta">—</div>
+            </div>
+            <div class="result-actions">
+              <button class="btn btn-secondary" onclick="previewMap()">👁 Anteprima</button>
+              <button class="btn btn-primary" onclick="downloadMap()">⬇ Scarica HTML</button>
+            </div>
+          </div>
+          <div class="map-preview" id="mapPreview">
+            <div style="text-align:center;color:var(--text3);font-size:0.85rem;">
+              Clicca <strong style="color:var(--text2)">Anteprima</strong> per vedere la mappa
+            </div>
+          </div>
+          <div class="config-summary" id="configSummary"></div>
+        </div>
+      </div>
+
+    </main>
+  </div>
+
+</div><!-- /app-layout -->
+
+<!-- GENERATING OVERLAY -->
+<div class="generating-overlay" id="genOverlay">
+  <div class="gen-spinner"></div>
+  <div class="gen-text">Generazione mappa in corso…</div>
+</div>
+
+<!-- TOAST -->
+<div class="toast" id="toast"></div>
+
+<script>
+// ═══════════════════════════════════════════════════════
+//  STATE
+// ═══════════════════════════════════════════════════════
+const state = {
+  file: null,
+  data: null,       // { province: [...], values: [...] }
+  columns: [],
+  colProvince: null,
+  colValue: null,
+  territory: 'province',
+  vizType: 'coropletica',
+  scala: 'lineare',
+  palette: 'bianco-blu',
+  colorStart: '#ffffff',
+  colorEnd: '#333333',
+  tema: 'chiaro',
+  labels: new Set(['label_valore']),
+  interactivity: new Set(['tooltip','click_detail','slider']),
+  title: '',
+  source: '',
+  font: "'Inter', sans-serif",
+  generatedHTML: null,
+};
+
+// ═══════════════════════════════════════════════════════
+//  UI HELPERS
+// ═══════════════════════════════════════════════════════
+function toggleSection(id) {
+  const sec = document.getElementById(id);
+  sec.classList.toggle('open');
+}
+
+function selectRadio(el, name, value) {
+  document.querySelectorAll(`[name="${name}"]`).forEach(r => {
+    r.closest('.radio-item').classList.remove('selected');
+  });
+  el.classList.add('selected');
+  el.querySelector('input').checked = true;
+  state[name] = value;
+  updateSummaries();
+  updateProgress();
+}
+
+function toggleCheck(el, key) {
+  el.classList.toggle('selected');
+  if (state.labels.has(key)) { state.labels.delete(key); }
+  else if (state.interactivity.has(key)) { state.interactivity.delete(key); }
+  else {
+    // add to right set
+    if (['label_valore','label_nome'].includes(key)) state.labels.add(key);
+    else state.interactivity.add(key);
+  }
+  if (el.classList.contains('selected')) {
+    if (['label_valore','label_nome'].includes(key)) state.labels.add(key);
+    else state.interactivity.add(key);
+  } else {
+    state.labels.delete(key);
+    state.interactivity.delete(key);
+  }
+  updateSummaries();
+}
+
+function selectPalette(el, value) {
+  document.querySelectorAll('.palette-item').forEach(p => p.classList.remove('selected'));
+  el.classList.add('selected');
+  state.palette = value;
+  document.getElementById('colorCustom').classList.toggle('show', value === 'personalizzata');
+  document.getElementById('sum4').textContent = el.querySelector('.palette-name').textContent;
+  updateProgress();
+}
+
+function updateCustomPalette() {
+  state.colorStart = document.getElementById('colorStart').value;
+  state.colorEnd = document.getElementById('colorEnd').value;
+  document.getElementById('customPaletteBar').style.background =
+    `linear-gradient(to right,${state.colorStart},${state.colorEnd})`;
+}
+
+function updateSum6() {
+  const t = document.getElementById('mapTitle').value;
+  state.title = t;
+  state.font = document.getElementById('mapFont').value;
+  document.getElementById('sum6').textContent = t || '—';
+  updateProgress();
+}
+
+function updateSummaries() {
+  const territoryMap = {province:'Province',regioni:'Regioni',europa:'Europa'};
+  const vizMap = {coropletica:'Coropletica',dashboard:'Dashboard'};
+  const scalaMap = {logaritmica:'Log',lineare:'Lineare',quantili:'Quantili'};
+  document.getElementById('sum2').textContent = territoryMap[state.territory] || '—';
+  document.getElementById('sum3').textContent = `${vizMap[state.vizType]} · ${scalaMap[state.scala]}`;
+
+  const interLabels = [];
+  if (state.interactivity.has('tooltip')) interLabels.push('Tooltip');
+  if (state.interactivity.has('click_detail')) interLabels.push('Click');
+  if (state.interactivity.has('slider')) interLabels.push('Slider');
+  document.getElementById('sum5').textContent = interLabels.join(', ') || 'Nessuna';
+}
+
+function updateProgress() {
+  let score = 0;
+  if (state.data) score += 40;
+  if (state.territory) score += 10;
+  if (state.vizType) score += 10;
+  if (state.palette) score += 10;
+  if (state.tema) score += 10;
+  if (state.title) score += 20;
+  document.getElementById('progressFill').style.width = score + '%';
+
+  const canGenerate = state.data !== null;
+  document.getElementById('btnGenerate').disabled = !canGenerate;
+}
+
+function showToast(msg, type='success') {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = `toast show ${type}`;
+  setTimeout(() => t.classList.remove('show'), 3500);
+}
+
+// ═══════════════════════════════════════════════════════
+//  FILE HANDLING
+// ═══════════════════════════════════════════════════════
+const drop = document.getElementById('fileDrop');
+drop.addEventListener('dragover', e => { e.preventDefault(); drop.classList.add('drag'); });
+drop.addEventListener('dragleave', () => drop.classList.remove('drag'));
+drop.addEventListener('drop', e => {
+  e.preventDefault(); drop.classList.remove('drag');
+  handleFile(e.dataTransfer.files[0]);
+});
+
+function handleFile(file) {
+  if (!file) return;
+  state.file = file;
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const wb = XLSX.read(e.target.result, {type:'array'});
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(ws, {header:1, defval:''});
+      if (rows.length < 2) { showToast('File vuoto o non valido', 'error'); return; }
+
+      const headers = rows[0].map(String);
+      const dataRows = rows.slice(1).filter(r => r.some(c => c !== ''));
+      state.columns = headers;
+
+      // Popola select
+      const selP = document.getElementById('colProvince');
+      const selV = document.getElementById('colValue');
+      selP.innerHTML = headers.map((h,i) => `<option value="${i}">${h}</option>`).join('');
+      selV.innerHTML = headers.map((h,i) => `<option value="${i}">${h}</option>`).join('');
+
+      // Auto-detect: colonna testo → province, colonna numerica → valore
+      let idxP = 0, idxV = 1;
+      headers.forEach((h, i) => {
+        const lower = h.toLowerCase();
+        if (lower.includes('prov') || lower.includes('territ') || lower.includes('area')) idxP = i;
+        if (lower.includes('val') || lower.includes('dato') || lower.includes('compart') || lower.includes('totale')) idxV = i;
+      });
+      selP.value = idxP; selV.value = idxV;
+
+      // Parse data
+      parseData(dataRows, idxP, idxV);
+
+      document.getElementById('fileName').textContent = '📄 ' + file.name;
+      document.getElementById('fileStats').textContent =
+        `${dataRows.length} righe · ${headers.length} colonne`;
+      document.getElementById('fileLoaded').classList.add('show');
+      document.getElementById('colSelector').classList.add('show');
+
+      document.getElementById('sec1').classList.add('done');
+      document.getElementById('sum1').textContent = file.name.slice(0,16);
+      updateProgress();
+      updatePreview();
+
+    } catch(err) {
+      showToast('Errore lettura file: ' + err.message, 'error');
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function parseData(rows, idxP, idxV) {
+  const EXCLUDED = new Set(['altro','san marino','estero','nd','n/d','totale','italia','non definito']);
+  const provinces = [], values = [];
+  rows.forEach(r => {
+    const p = String(r[idxP] || '').trim();
+    const v = parseFloat(String(r[idxV] || '').replace(',','.'));
+    if (!p || EXCLUDED.has(p.toLowerCase()) || isNaN(v)) return;
+    provinces.push(p.toUpperCase());
+    values.push(v);
+  });
+  state.data = { provinces, values };
+
+  // Log hint
+  const vmin = Math.min(...values), vmax = Math.max(...values);
+  const ratio = vmax / Math.max(1, vmin);
+  if (ratio > 50) {
+    document.getElementById('logHint').classList.add('show');
+    // Auto-suggest log scale
+    document.querySelector('[name="scala"][value="logaritmica"]').closest('.radio-item').click();
+  } else {
+    document.getElementById('logHint').classList.remove('show');
+  }
+}
+
+function updatePreview() {
+  const idxP = parseInt(document.getElementById('colProvince').value);
+  const idxV = parseInt(document.getElementById('colValue').value);
+  if (!state.file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    const wb = XLSX.read(e.target.result, {type:'array'});
+    const ws = wb.Sheets[wb.SheetNames[0]];
+    const rows = XLSX.utils.sheet_to_json(ws, {header:1, defval:''});
+    parseData(rows.slice(1).filter(r=>r.some(c=>c!=='')), idxP, idxV);
+    updateProgress();
+  };
+  reader.readAsArrayBuffer(state.file);
+}
+
+// ═══════════════════════════════════════════════════════
+//  MAP GENERATOR
+// ═══════════════════════════════════════════════════════
+function generateMap() {
+  if (!state.data) { showToast('Carica prima un file Excel', 'error'); return; }
+
+  document.getElementById('genOverlay').classList.add('show');
+
+  setTimeout(() => {
+    try {
+      const html = buildMapHTML();
+      state.generatedHTML = html;
+
+      document.getElementById('genOverlay').classList.remove('show');
+      document.getElementById('emptyState').style.display = 'none';
+      document.getElementById('resultArea').classList.add('show');
+
+      const title = state.title || 'Mappa Province Italiane';
+      document.getElementById('resultTitle').textContent = title;
+      document.getElementById('resultMeta').textContent =
+        `${state.data.provinces.length} territori · ${state.vizType} · ${state.scala} · ${state.palette}`;
+
+      // Config summary
+      document.getElementById('configSummary').innerHTML = `
+        <div class="cfg-item"><div class="cfg-label">Territorio</div><div class="cfg-value">${state.territory}</div></div>
+        <div class="cfg-item"><div class="cfg-label">Scala</div><div class="cfg-value">${state.scala}</div></div>
+        <div class="cfg-item"><div class="cfg-label">Palette</div><div class="cfg-value">${state.palette}</div></div>
+        <div class="cfg-item"><div class="cfg-label">Tema</div><div class="cfg-value">${state.tema}</div></div>
+        <div class="cfg-item"><div class="cfg-label">Visualizzazione</div><div class="cfg-value">${state.vizType}</div></div>
+        <div class="cfg-item"><div class="cfg-label">Dati</div><div class="cfg-value">${state.data.provinces.length} province</div></div>
+      `;
+
+      showToast('✅ Mappa generata con successo!');
+      updateProgress();
+
+    } catch(err) {
+      document.getElementById('genOverlay').classList.remove('show');
+      showToast('Errore generazione: ' + err.message, 'error');
+      console.error(err);
+    }
+  }, 300);
+}
+
+function previewMap() {
+  if (!state.generatedHTML) return;
+  const preview = document.getElementById('mapPreview');
+  const blob = new Blob([state.generatedHTML], {type:'text/html'});
+  const url = URL.createObjectURL(blob);
+  preview.innerHTML = `<iframe src="${url}" style="width:100%;height:500px;border:none;border-radius:8px;"></iframe>`;
+}
+
+function downloadMap() {
+  if (!state.generatedHTML) return;
+  const title = (state.title || 'mappa_province').replace(/[^a-z0-9]/gi,'_').toLowerCase();
+  const blob = new Blob([state.generatedHTML], {type:'text/html'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `${title}.html`;
+  a.click();
+  showToast('⬇ Download avviato!');
+}
+
+// ═══════════════════════════════════════════════════════
+//  HTML BUILDER
+// ═══════════════════════════════════════════════════════
+function buildMapHTML() {
+  const { provinces, values } = state.data;
+  const title = state.title || 'Mappa Province Italiane';
+  const source = state.source || '';
+  const isDashboard = state.vizType === 'dashboard';
+
+  // GeoJSON URL by territory
+  const GEO_URLS = {
+    province: 'https://raw.githubusercontent.com/openpolis/geojson-italy/master/geojson/limits_IT_provinces.geojson',
+    regioni:  'https://raw.githubusercontent.com/openpolis/geojson-italy/master/geojson/limits_IT_regions.geojson',
+    europa:   'https://raw.githubusercontent.com/leakyMirror/map-of-europe/master/GeoJSON/europe.geojson',
+  };
+  const GEO_PROP = { province:'prov_name', regioni:'reg_name', europa:'NAME' };
+  const PROJECTIONS = {
+    province: `d3.geoMercator().center([12.5,42.0]).scale(2600).translate([W/2,H/2])`,
+    regioni:  `d3.geoMercator().center([12.5,42.0]).scale(2600).translate([W/2,H/2])`,
+    europa:   `d3.geoMercator().center([15,54]).scale(620).translate([W/2,H/2])`,
+  };
+
+  // Build data object
+  const dataObj = {};
+  provinces.forEach((p,i) => { dataObj[p] = values[i]; });
+
+  // Colors
+  const colorInterpolators = {
+    'bianco-blu':   `d3.interpolateRgb('#f0f8ff','#083d7f')`,
+    'bianco-verde': `d3.interpolateRgb('#f0fff4','#1a5c2a')`,
+    'bianco-rosso': `d3.interpolateRgb('#fff5f5','#8b0000')`,
+    'semaforo':     `t => d3.interpolateRdYlGn(1-t)`,
+    'calore':       `d3.interpolateYlOrRd`,
+    'personalizzata': `d3.interpolateRgb('${state.colorStart}','${state.colorEnd}')`,
+  };
+  const interpolator = colorInterpolators[state.palette] || colorInterpolators['bianco-blu'];
+
+  // Scale
+  let scaleCode;
+  if (state.scala === 'logaritmica') {
+    scaleCode = `d3.scaleSequentialLog().domain([Math.max(1,minVal),maxVal]).interpolator(${interpolator})`;
+  } else if (state.scala === 'quantili') {
+    scaleCode = `d3.scaleQuantile().domain(Object.values(DATA).filter(v=>v!==null)).range(d3.quantize(${interpolator},5))`;
+  } else {
+    scaleCode = `d3.scaleSequential().domain([minVal,maxVal]).interpolator(${interpolator})`;
+  }
+
+  // Synonyms
+  const SYNONYMS_JS = `const SYNONYMS={"Forlì-Cesena":"FORLI' CESENA","Forlì Cesena":"FORLI' CESENA","FORLI'-CESENA":"FORLI' CESENA","Reggio nell'Emilia":"REGGIO EMILIA","Reggio Emilia":"REGGIO EMILIA","L'Aquila":"L'AQUILA","Ascoli Piceno":"ASCOLI PICENO","Pesaro e Urbino":"PESARO E URBINO","Pesaro-Urbino":"PESARO E URBINO","Monza e della Brianza":"MONZA BRIANZA","Monza e Brianza":"MONZA BRIANZA","Verbano-Cusio-Ossola":"VERBANIA","Verbano Cusio Ossola":"VERBANIA","Reggio Calabria":"REGGIO CALABRIA","Reggio di Calabria":"REGGIO CALABRIA","Massa-Carrara":"MASSA","Massa Carrara":"MASSA","Barletta-Andria-Trani":"BARLETTA-ANDRIA-TRANI","Sud Sardegna":"SUD SARDEGNA","Valle d'Aosta":"AOSTA","Valle d\\u2019Aosta":"AOSTA","Bolzano/Bozen":"BOLZANO","Vibo Valentia":"VIBO VALENTIA","La Spezia":"LA SPEZIA","Forl\\u00ec-Cesena":"FORLI' CESENA","reg_name_FR":"REGGIO EMILIA"};`;
+
+  // Theme CSS
+  const themes = {
+    chiaro: `--bg-page:#f0f4f8;--card-bg:#ffffff;--alt-row:#f8fafc;--title:#1a2940;--sub:#5a7a9a;--footer:#8a9ab0;--border:#e0e8f0;`,
+    scuro:  `--bg-page:#0f1923;--card-bg:#1a2535;--alt-row:#1f2d3d;--title:#e8f0fe;--sub:#8aa0c0;--footer:#506070;--border:#2a3a4e;`,
+    corporate:`--bg-page:#f4f6f9;--card-bg:#ffffff;--alt-row:#f0f4f8;--title:#1e3a5f;--sub:#4a6a8a;--footer:#8a9ab0;--border:#dde4ed;`,
+  };
+  const themeVars = themes[state.tema] || themes.chiaro;
+
+  // Font imports
+  const fontImportMap = {
+    "'Quattrocento Sans', sans-serif": `<link href="https://fonts.googleapis.com/css2?family=Quattrocento+Sans:wght@400;700&display=swap" rel="stylesheet">`,
+    "'DM Sans', sans-serif": `<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;600;700&display=swap" rel="stylesheet">`,
+    "'Roboto', sans-serif": `<link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">`,
+    "'Georgia', serif": '',
+    "'Inter', sans-serif": `<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">`,
+  };
+  const fontImport = fontImportMap[state.font] || '';
+
+  const showTooltip = state.interactivity.has('tooltip');
+  const showClick   = state.interactivity.has('click_detail');
+  const showSlider  = state.interactivity.has('slider');
+  const showLabelVal = state.labels.has('label_valore');
+  const showLabelName = state.labels.has('label_nome');
+
+  const dashboardExtra = isDashboard ? `
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"><\/script>` : '';
+
+  const headerAccent = state.tema === 'corporate' ? '#3a7abf' : state.tema === 'scuro' ? '#2a3a5e' : '#e0e8f0';
+
+  return `<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>${title}</title>
+${fontImport}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"><\/script>
+${dashboardExtra}
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+:root{${themeVars}font-family:${state.font};}
+body{background:var(--bg-page);color:var(--title);min-height:100vh;}
+.header{background:var(--card-bg);border-bottom:3px solid ${headerAccent};padding:22px 32px;box-shadow:0 2px 12px rgba(0,0,0,0.06);}
+.header h1{font-size:1.5rem;font-weight:700;}
+.header p{font-size:0.85rem;color:var(--sub);margin-top:4px;}
+.kpi-row{display:flex;gap:12px;max-width:1200px;margin:20px auto 0;padding:0 24px;flex-wrap:wrap;}
+.kpi-card{background:var(--card-bg);border-radius:10px;padding:14px 18px;box-shadow:0 2px 8px rgba(0,0,0,0.05);flex:1;min-width:140px;border-top:3px solid ${headerAccent};}
+.kpi-label{font-size:0.68rem;color:var(--sub);text-transform:uppercase;letter-spacing:.5px;font-weight:700;}
+.kpi-value{font-size:1.3rem;font-weight:700;margin-top:2px;}
+.kpi-sub{font-size:0.7rem;color:var(--sub);margin-top:2px;}
+${showSlider?`.slider-wrap{max-width:1200px;margin:14px auto 0;padding:0 24px;}
+.slider-card{background:var(--card-bg);border-radius:10px;padding:12px 18px;display:flex;align-items:center;gap:14px;flex-wrap:wrap;box-shadow:0 2px 8px rgba(0,0,0,0.05);}
+.slider-label{font-size:.8rem;color:var(--sub);font-weight:600;white-space:nowrap;}
+.slider-inputs{flex:1;min-width:200px;}
+.slider-inputs input[type=range]{width:100%;display:block;margin:2px 0;accent-color:${headerAccent};}
+#slider-val{font-size:.8rem;font-weight:700;white-space:nowrap;}
+.btn-reset{padding:6px 12px;background:var(--card-bg);border:1px solid var(--border);border-radius:6px;cursor:pointer;font-size:.75rem;font-family:inherit;}
+.btn-reset:hover{border-color:${headerAccent};}` : ''}
+.main-grid{display:grid;grid-template-columns:${isDashboard?'1fr 300px':'1fr'};gap:16px;max-width:1200px;margin:16px auto 0;padding:0 24px;}
+@media(max-width:900px){.main-grid{grid-template-columns:1fr;}}
+.map-card{background:var(--card-bg);border-radius:12px;padding:16px;box-shadow:0 2px 8px rgba(0,0,0,0.05);}
+.card-title{font-size:.75rem;font-weight:700;color:var(--sub);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px;}
+.area{stroke:#fff;stroke-width:.5;cursor:pointer;transition:opacity .15s;}
+.area:hover{opacity:.8;stroke-width:1.5;}
+.area.dimmed{opacity:.15;}
+.legend-wrap{margin-top:12px;}
+.sidebar{display:flex;flex-direction:column;gap:12px;}
+.card{background:var(--card-bg);border-radius:12px;padding:16px;box-shadow:0 2px 8px rgba(0,0,0,0.05);}
+.charts-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;max-width:1200px;margin:12px auto 0;padding:0 24px;}
+@media(max-width:700px){.charts-row{grid-template-columns:1fr;}}
+.chart-wrap{position:relative;height:200px;}
+table{width:100%;border-collapse:collapse;font-size:.78rem;}
+.table-scroll{max-height:280px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;}
+thead th{position:sticky;top:0;background:var(--card-bg);border-bottom:2px solid var(--border);padding:6px 10px;text-align:left;color:var(--sub);font-weight:700;font-size:.68rem;text-transform:uppercase;}
+tbody tr{border-top:1px solid var(--border);}
+tbody tr:nth-child(even){background:var(--alt-row);}
+tbody td{padding:5px 10px;}
+.td-r{text-align:right;font-weight:700;}
+.td-pct{text-align:right;color:var(--sub);font-size:.7rem;}
+#map-tooltip{position:fixed;background:rgba(15,25,50,.93);color:#fff;padding:9px 14px;border-radius:8px;font-size:.82rem;pointer-events:none;opacity:0;z-index:100;box-shadow:0 4px 14px rgba(0,0,0,.22);line-height:1.6;max-width:200px;transition:opacity .1s;}
+#detail-panel{display:none;position:fixed;bottom:20px;right:20px;background:var(--card-bg);border-radius:14px;padding:18px 20px;width:250px;box-shadow:0 8px 32px rgba(0,0,0,.15);z-index:50;border:1px solid var(--border);}
+.det-name{font-size:.95rem;font-weight:700;}
+.det-val{font-size:1.7rem;font-weight:800;color:${headerAccent};margin:6px 0 4px;}
+.det-meta{font-size:.75rem;color:var(--sub);line-height:1.7;}
+.det-close{position:absolute;top:10px;right:12px;background:none;border:none;font-size:1rem;cursor:pointer;color:var(--sub);}
+#loading{text-align:center;padding:60px 30px;color:var(--sub);}
+.spin{font-size:2rem;animation:pulse 1.5s infinite;}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+.footer{max-width:1200px;margin:20px auto;padding:0 24px 28px;font-size:.72rem;color:var(--footer);display:flex;justify-content:space-between;flex-wrap:wrap;gap:6px;border-top:1px solid var(--border);padding-top:12px;}
+</style>
+</head>
+<body>
+<div class="header" style="max-width:100%;">
+  <h1>${title}</h1>
+  <p>${state.territory === 'province' ? 'Distribuzione per provincia · Italia' : state.territory === 'regioni' ? 'Distribuzione per regione · Italia' : 'Distribuzione per nazione · Europa'} · Scala ${state.scala}${source ? ' · Fonte: '+source : ''}</p>
+</div>
+<div class="kpi-row" id="kpi-row"></div>
+${showSlider ? `<div class="slider-wrap"><div class="slider-card">
+<span class="slider-label">🎚 Filtra:</span>
+<div class="slider-inputs"><input type="range" id="s-min"><input type="range" id="s-max"></div>
+<span id="slider-val">tutti</span>
+<button class="btn-reset" id="s-reset">↺ Reset</button>
+</div></div>` : ''}
+<div class="main-grid">
+<div class="map-card">
+  <div class="card-title">🗺 Mappa</div>
+  <div id="map-container"><div id="loading"><div class="spin">🗺️</div><div style="font-size:.95rem;font-weight:600;margin-top:10px;">Caricamento mappa…</div><div style="font-size:.78rem;margin-top:6px;">Scaricamento dati geografici</div></div></div>
+  <div class="legend-wrap" id="legend-wrap"></div>
+</div>
+${isDashboard ? `<div class="sidebar">
+<div class="card"><div class="card-title">🏆 Top 10</div><div class="chart-wrap"><canvas id="c-top10"></canvas></div></div>
+<div class="card"><div class="card-title">📋 Classifica</div><div class="table-scroll"><table><thead><tr><th>#</th><th>Territorio</th><th style="text-align:right">Valore</th><th style="text-align:right">%</th></tr></thead><tbody id="rank-body"></tbody></table></div></div>
+</div>` : ''}
+</div>
+${isDashboard ? `<div class="charts-row">
+<div class="card"><div class="card-title">🍩 Macro-aree</div><div class="chart-wrap"><canvas id="c-macro"></canvas></div></div>
+<div class="card"><div class="card-title">📉 Bottom 10</div><div class="chart-wrap"><canvas id="c-bottom10"></canvas></div></div>
+</div>` : ''}
+<div class="footer">
+<span>${title}${source ? ' · ' + source : ''}</span>
+<span>⚠️ Richiede connessione internet per la mappa geografica</span>
+</div>
+<div id="map-tooltip"></div>
+${showClick ? `<div id="detail-panel"><button class="det-close" onclick="this.parentElement.style.display='none'">✕</button><div id="det-content"></div></div>` : ''}
+<script>
+const DATA=${JSON.stringify(dataObj)};
+${SYNONYMS_JS}
+const EXCLUDED=new Set(['ALTRO','SAN MARINO','ESTERO','ND','N/D','TOTALE','ITALIA']);
+const norm=Object.fromEntries(Object.entries(DATA).map(([k,v])=>[k.toUpperCase().trim(),v]));
+function lookup(name){
+  if(!name)return null;
+  const u=name.toUpperCase().trim();
+  if(EXCLUDED.has(u))return null;
+  if(norm[u]!==undefined)return norm[u];
+  const syn=SYNONYMS[name]||SYNONYMS[u];
+  if(syn&&norm[syn.toUpperCase()]!==undefined)return norm[syn.toUpperCase()];
+  for(const[k,v]of Object.entries(norm)){if(u.includes(k)||k.includes(u))return v;}
+  return null;
+}
+function fmt(v){if(v===null||v===undefined)return'N/D';return v.toLocaleString('it-IT');}
+const allVals=Object.values(DATA);
+const total=allVals.reduce((a,b)=>a+b,0);
+const avg=Math.round(total/allVals.length);
+const maxE=Object.entries(DATA).reduce((a,b)=>b[1]>a[1]?b:a);
+const minE=Object.entries(DATA).reduce((a,b)=>b[1]<a[1]?b:a);
+window._mapTotal=total;
+// KPI
+const kpiRow=document.getElementById('kpi-row');
+[{l:'Totale',v:fmt(total)},{l:'Media',v:fmt(avg)},{l:'Massimo',v:fmt(maxE[1]),s:maxE[0]},{l:'Minimo',v:fmt(minE[1]),s:minE[0]}].forEach(k=>{
+  kpiRow.innerHTML+=\`<div class="kpi-card"><div class="kpi-label">\${k.l}</div><div class="kpi-value">\${k.v}</div>\${k.s?'<div class="kpi-sub">'+k.s+'</div>':''}</div>\`;
+});
+// Color scale
+const minVal=Math.max(1,Math.min(...allVals)),maxVal=Math.max(...allVals);
+const colorScale=${scaleCode};
+function getColor(v){if(v===null)return'#cccccc';return colorScale(${state.scala==='quantili'?'v':`Math.max(minVal,v)`});}
+// Legend
+(function(){
+  const c=document.getElementById('legend-wrap');
+  const id='lg'+Date.now();
+  const svg=d3.select(c).append('svg').attr('width','100%').attr('height',46).attr('viewBox','0 0 280 46');
+  const defs=svg.append('defs');
+  const g=defs.append('linearGradient').attr('id',id);
+  d3.range(0,1.01,.05).forEach(t=>{
+    g.append('stop').attr('offset',t*100+'%').attr('stop-color',
+      ${state.scala==='logaritmica'?`colorScale(minVal*Math.pow(maxVal/minVal,t))`:`colorScale(minVal+t*(maxVal-minVal))`});
+  });
+  svg.append('rect').attr('x',8).attr('y',6).attr('width',264).attr('height',12).attr('rx',6).attr('fill','url(#'+id+')').attr('stroke','#ccd8e8').attr('stroke-width',.6);
+  svg.append('text').attr('x',8).attr('y',36).text(fmt(minVal)).attr('font-size','10px').attr('fill','var(--sub)');
+  svg.append('text').attr('x',272).attr('y',36).text(fmt(maxVal)).attr('text-anchor','end').attr('font-size','10px').attr('fill','var(--sub)');
+})();
+${isDashboard ? `
+// TOP10
+(function(){const sorted=Object.entries(DATA).sort((a,b)=>b[1]-a[1]).slice(0,10);
+new Chart(document.getElementById('c-top10').getContext('2d'),{type:'bar',data:{labels:sorted.map(([k])=>k),datasets:[{data:sorted.map(([,v])=>v),backgroundColor:sorted.map(([,v])=>getColor(v)),borderRadius:3,borderSkipped:false}]},options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>' '+fmt(c.raw)}}},scales:{x:{beginAtZero:true,grid:{color:'rgba(0,0,0,.04)'},ticks:{callback:v=>v>=1000?Math.round(v/1000)+'k':v,font:{size:9}}},y:{grid:{display:false},ticks:{font:{size:9}}}}}});})();
+// BOTTOM10
+(function(){const sorted=Object.entries(DATA).sort((a,b)=>a[1]-b[1]).slice(0,10);
+new Chart(document.getElementById('c-bottom10').getContext('2d'),{type:'bar',data:{labels:sorted.map(([k])=>k),datasets:[{data:sorted.map(([,v])=>v),backgroundColor:sorted.map(([,v])=>getColor(v)),borderRadius:3,borderSkipped:false}]},options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>' '+fmt(c.raw)}}},scales:{x:{beginAtZero:true,grid:{color:'rgba(0,0,0,.04)'},ticks:{font:{size:9}}},y:{grid:{display:false},ticks:{font:{size:9}}}}}});})();
+// RANKING TABLE
+(function(){const sorted=Object.entries(DATA).sort((a,b)=>b[1]-a[1]);const tbody=document.getElementById('rank-body');sorted.forEach(([k,v],i)=>{tbody.innerHTML+=\`<tr><td style="color:var(--sub);font-size:.7rem">\${i+1}</td><td>\${k}</td><td class="td-r">\${fmt(v)}</td><td class="td-pct">\${((v/total)*100).toFixed(1)}%</td></tr>\`;});})();
+// MACRO
+(function(){
+const NORD=['TORINO','VERCELLI','NOVARA','CUNEO','ASTI','ALESSANDRIA','BIELLA','VERBANIA','AOSTA','IMPERIA','SAVONA','GENOVA','LA SPEZIA','VARESE','COMO','SONDRIO','MILANO','BERGAMO','BRESCIA','PAVIA','CREMONA','MANTOVA','LECCO','LODI','MONZA BRIANZA','BOLZANO','TRENTO','VERONA','VICENZA','BELLUNO','TREVISO','VENEZIA','PADOVA','ROVIGO','UDINE','GORIZIA','TRIESTE','PORDENONE','PIACENZA','PARMA','REGGIO EMILIA','MODENA','BOLOGNA','FERRARA','RAVENNA',"FORLI' CESENA",'RIMINI'];
+const CENTRO=['MASSA','LUCCA','PISTOIA','FIRENZE','PRATO','LIVORNO','PISA','AREZZO','SIENA','GROSSETO','PERUGIA','TERNI','VITERBO','RIETI','ROMA','LATINA','FROSINONE','ANCONA','PESARO E URBINO','MACERATA','FERMO','ASCOLI PICENO'];
+const totals={NORD:0,CENTRO:0,'SUD+ISOLE':0};
+for(const[k,v]of Object.entries(DATA)){const u=k.toUpperCase();if(NORD.includes(u))totals.NORD+=v;else if(CENTRO.includes(u))totals.CENTRO+=v;else totals['SUD+ISOLE']+=v;}
+new Chart(document.getElementById('c-macro').getContext('2d'),{type:'doughnut',data:{labels:Object.keys(totals),datasets:[{data:Object.values(totals),backgroundColor:['#1e6ba0','#4a9cc7','#a8d4ed'],borderWidth:2,borderColor:'#fff'}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{font:{size:10},padding:8}},tooltip:{callbacks:{label:c=>\` \${c.label}: \${fmt(c.raw)} (\${((c.raw/total)*100).toFixed(1)}%)\`}}}}});
+})();` : ''}
+// MAP
+const GEO_URL='${GEO_URLS[state.territory]}';
+const GEO_PROP='${GEO_PROP[state.territory]}';
+const W=860,H=1000;
+let svgMap;
+fetch(GEO_URL).then(r=>{if(!r.ok)throw new Error('HTTP '+r.status);return r.json();}).then(geo=>{
+  document.getElementById('loading').remove();
+  const proj=${PROJECTIONS[state.territory]};
+  const path=d3.geoPath().projection(proj);
+  const container=document.getElementById('map-container');
+  svgMap=d3.select(container).append('svg').attr('viewBox','0 0 '+W+' '+H).attr('preserveAspectRatio','xMidYMid meet').style('width','100%').style('height','auto');
+  ${showTooltip ? `const tooltip=d3.select('#map-tooltip');` : ''}
+  svgMap.selectAll('.area').data(geo.features).enter().append('path')
+    .attr('class','area')
+    .attr('d',path)
+    .attr('fill',d=>getColor(lookup(d.properties[GEO_PROP])))
+    ${showTooltip ? `.on('mousemove',(e,d)=>{const n=d.properties[GEO_PROP]||'';const v=lookup(n);let h='<strong>'+n+'</strong>';if(v!==null){h+='<br>Valore: <b>'+fmt(v)+'</b><br>% totale: <b>'+((v/total)*100).toFixed(1)+'%</b>';}else{h+='<br><span style="color:#ffaaaa">N/D</span>';}tooltip.style('opacity',1).style('left',(e.clientX+14)+'px').style('top',(e.clientY-10)+'px').html(h);}).on('mouseleave',()=>tooltip.style('opacity',0))` : ''}
+    ${showClick ? `.on('click',(e,d)=>{const n=d.properties[GEO_PROP]||'';const v=lookup(n);const rank=Object.entries(DATA).sort((a,b)=>b[1]-a[1]).findIndex(([k])=>k.toUpperCase()===n.toUpperCase())+1;document.getElementById('det-content').innerHTML='<div class="det-name">'+n+'</div><div class="det-val">'+(v!==null?fmt(v):'N/D')+'</div>'+(v!==null?'<div class="det-meta">Rank: <b>#'+rank+'</b> su '+Object.keys(DATA).length+'<br>% totale: <b>'+((v/total)*100).toFixed(1)+'%</b><br>Scarto dalla media: <b>'+(v>=avg?'+':'')+fmt(v-avg)+'</b></div>':'');document.getElementById('detail-panel').style.display='block';e.stopPropagation();})` : ''}
+  ;
+  ${(showLabelVal || showLabelName) ? `
+  const labG=svgMap.append('g').attr('pointer-events','none');
+  geo.features.forEach(d=>{
+    const n=d.properties[GEO_PROP]||'';
+    const v=lookup(n);
+    const c=path.centroid(d);if(isNaN(c[0]))return;
+    const b=path.bounds(d);const aw=b[1][0]-b[0][0];
+    const fs=Math.max(5,Math.min(aw*.18,9));
+    const t=(v!==null&&maxVal>minVal)?Math.log(Math.max(1,v)/minVal)/Math.log(maxVal/minVal):0;
+    const tc=t>0.5?'#ffffff':'#1a1a1a';
+    const lines=[];
+    ${showLabelName?`lines.push(n.length>6?n.slice(0,5)+'…':n);`:''}
+    ${showLabelVal?`lines.push(v!==null?(v>=1000?(v/1000).toFixed(1)+'k':String(v)):'');`:''}
+    lines.filter(Boolean).forEach((l,i)=>{labG.append('text').attr('x',c[0]).attr('y',c[1]+(i-(lines.length-1)/2)*fs*1.2).attr('text-anchor','middle').attr('dominant-baseline','middle').attr('font-size',fs).attr('font-weight','700').attr('fill',tc).text(l);});
+  });` : ''}
+  ${showSlider ? `
+  const sMin=document.getElementById('s-min'),sMax=document.getElementById('s-max'),sVal=document.getElementById('slider-val');
+  sMin.min=sMax.min=Math.floor(minVal);sMin.max=sMax.max=Math.ceil(maxVal);sMin.value=Math.floor(minVal);sMax.value=Math.ceil(maxVal);sVal.textContent=fmt(Math.floor(minVal))+' – '+fmt(Math.ceil(maxVal));
+  function updSlider(){let lo=+sMin.value,hi=+sMax.value;if(lo>hi){sMin.value=hi;lo=hi;}sVal.textContent=fmt(lo)+' – '+fmt(hi);svgMap.selectAll('.area').attr('fill',d=>{const v=lookup(d.properties[GEO_PROP]);if(v===null)return'#cccccc';if(v<lo||v>hi)return'#e8edf5';return getColor(v);}).classed('dimmed',d=>{const v=lookup(d.properties[GEO_PROP]);return v!==null&&(v<lo||v>hi);});}
+  sMin.addEventListener('input',updSlider);sMax.addEventListener('input',updSlider);
+  document.getElementById('s-reset').addEventListener('click',()=>{sMin.value=Math.floor(minVal);sMax.value=Math.ceil(maxVal);updSlider();});` : ''}
+  ${showClick ? `document.addEventListener('click',()=>{document.getElementById('detail-panel').style.display='none';});` : ''}
+}).catch(err=>{document.getElementById('loading').innerHTML='<p style="color:#c00;text-align:center;padding:40px;">⚠️ Errore caricamento mappa.<br><small>'+err.message+'</small><br><br>Verificare la connessione internet e ricaricare.</p>';});
+<\/script>
+</body>
+</html>`;
+}
+
+// ═══════════════════════════════════════════════════════
+//  INIT
+// ═══════════════════════════════════════════════════════
+updateSummaries();
+updateProgress();
+</script>
+</body>
+</html>
