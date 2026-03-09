@@ -1592,6 +1592,25 @@ function buildHTML() {
   const DATA_OBJ = {};
   provinces.forEach((p,i) => { DATA_OBJ[p] = values[i]; });
 
+  // FIX 2: seconda colonna per compare
+  let DATA_OBJ2 = null;
+  let col2Label = '';
+  if (S.compare && S._rawRows) {
+    const iv2 = parseInt(document.getElementById('selVal2').value);
+    const ip  = parseInt(document.getElementById('selProv').value);
+    const iv  = parseInt(document.getElementById('selVal').value);
+    col2Label = S._rawHeaders[iv2] || 'Valore 2';
+    const col1Label = S._rawHeaders[iv] || 'Valore 1';
+    if (iv2 !== iv) {
+      DATA_OBJ2 = {};
+      S._rawRows.forEach(r => {
+        const p = String(r[ip]||'').trim().toUpperCase();
+        const v = parseFloat(String(r[iv2]||'').replace(',','.'));
+        if (p && !isNaN(v)) DATA_OBJ2[p] = v;
+      });
+    }
+  }
+
   // Font import
   const GOOGLE_FONTS = ['Inter','Montserrat','Roboto','Quattrocento Sans','DM Sans','Lato','Nunito','Oswald','Playfair Display','Source Sans Pro'];
   let fontImport = '';
@@ -1693,11 +1712,14 @@ function buildHTML() {
   // Highlights JS
   const hlCode = S.highlights.length ? buildHighlightCode() : '';
 
-  // Zoom
+  // Zoom — FIX 3: include bolleG nel transform
   const zoomCode = S.zoom ? `
-const zoom=d3.zoom().scaleExtent([1,8]).on('zoom',(e)=>{mapG.attr('transform',e.transform);labG.attr('transform',e.transform);});
-svgMap.call(zoom);
-svgMap.append('text').attr('x',8).attr('y',H-8).text('🔍 Scroll per zoom · Trascina per muovere').attr('font-size',9).attr('fill','var(--sub)').attr('pointer-events','none');` : '';
+const zoom=d3.zoom().scaleExtent([1,8]).on('zoom',(e)=>{
+  mapG.attr('transform',e.transform);
+  if(typeof labG!=='undefined')labG.attr('transform',e.transform);
+  if(typeof bolleG!=='undefined')bolleG.attr('transform',e.transform);
+});
+svgMap.call(zoom);` : '';
 
   // Search
   const searchHTML = S.search ? `
@@ -1713,16 +1735,43 @@ function doSearch(q){
   mapG.selectAll('.area').classed('dimmed',d=>{const n=(d.properties[GEO_PROP]||'').toUpperCase();return !n.includes(uq);});
 }` : '';
 
-  // Export PNG
-  const exportHTML = S.exportpng ? `<button onclick="exportPNG()" style="padding:8px 14px;border-radius:8px;border:1px solid var(--border);background:var(--card);cursor:pointer;color:var(--sub);font-family:inherit;font-size:.8rem;font-weight:600;transition:all .15s;" onmouseover="this.style.borderColor='${accentColor}'" onmouseout="this.style.borderColor='var(--border)'">📸 Esporta PNG</button>` : '';
+  // FIX 2: Switch dati HTML e JS
+  const col1Label = S._rawHeaders ? (S._rawHeaders[parseInt(document.getElementById('selVal').value)] || 'Valore 1') : 'Valore 1';
+  const switchHTML = (S.compare && DATA_OBJ2) ? `
+<div style="display:flex;gap:6px;align-items:center;background:var(--card);border:1px solid var(--border);border-radius:8px;padding:4px 6px;">
+  <span style="font-size:.72rem;color:var(--sub);font-weight:600;">Switch:</span>
+  <button id="sw1" onclick="switchData(1)" style="padding:5px 10px;border-radius:6px;border:none;background:${accentColor};color:#fff;font-family:inherit;font-size:.75rem;font-weight:700;cursor:pointer;">${col1Label}</button>
+  <button id="sw2" onclick="switchData(2)" style="padding:5px 10px;border-radius:6px;border:1px solid var(--border);background:var(--card);color:var(--sub);font-family:inherit;font-size:.75rem;font-weight:600;cursor:pointer;">${col2Label}</button>
+</div>` : '';
+
+  const switchCode = (S.compare && DATA_OBJ2) ? `
+const DATA2=${JSON.stringify(DATA_OBJ2)};
+const norm2=Object.fromEntries(Object.entries(DATA2).map(([k,v])=>[k.toUpperCase().trim(),v]));
+function lookup2(name){if(!name)return null;const u=name.toUpperCase().trim();if(EXCL.has(u))return null;if(norm2[u]!==undefined)return norm2[u];const syn=SYNONYMS[name]||SYNONYMS[u];if(syn&&norm2[syn.toUpperCase()]!==undefined)return norm2[syn.toUpperCase()];for(const[k,v]of Object.entries(norm2)){if(u.includes(k)||k.includes(u))return v;}return null;}
+let activeDataset=1;
+function switchData(n){
+  activeDataset=n;
+  const lkp=n===1?lookup:lookup2;
+  const allVn=Object.values(n===1?DATA:DATA2);
+  const mn=Math.max(1,Math.min(...allVn)),mx=Math.max(...allVn);
+  ${S.scala==='logaritmica'?`colorScale.domain([mn,mx]);`:`colorScale.domain([mn,mx]);`}
+  mapG.selectAll('.area').attr('fill',d=>getColor(lkp(d.properties[GEO_PROP])));
+  document.getElementById('sw1').style.background=n===1?'${accentColor}':'var(--card)';
+  document.getElementById('sw1').style.color=n===1?'#fff':'var(--sub)';
+  document.getElementById('sw1').style.border=n===1?'none':'1px solid var(--border)';
+  document.getElementById('sw2').style.background=n===2?'${accentColor}':'var(--card)';
+  document.getElementById('sw2').style.color=n===2?'#fff':'var(--sub)';
+  document.getElementById('sw2').style.border=n===2?'none':'1px solid var(--border)';
+}` : '';
   const exportScript = S.exportpng ? `<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"><\/script>` : '';
   const exportCode = S.exportpng ? `function exportPNG(){html2canvas(document.getElementById('map-container'),{backgroundColor:getComputedStyle(document.documentElement).getPropertyValue('--card').trim()||'#fff',scale:2,useCORS:true}).then(c=>{const a=document.createElement('a');a.download='${(S.title||'mappa').replace(/[^a-z0-9]/gi,'_')}.png';a.href=c.toDataURL();a.click();});}` : '';
 
-  // Animation
+  // Export PNG
+  const exportHTML = S.exportpng ? `<button onclick="exportPNG()" style="padding:8px 14px;border-radius:8px;border:1px solid var(--border);background:var(--card);cursor:pointer;color:var(--sub);font-family:inherit;font-size:.8rem;font-weight:600;transition:all .15s;" onmouseover="this.style.borderColor='${accentColor}'" onmouseout="this.style.borderColor='var(--border)'">📸 Esporta PNG</button>` : '';
   const animCSS = S.animation ? `@keyframes fadeInProv{from{opacity:0}to{opacity:1}}.area{animation:fadeInProv .5s ease forwards;opacity:0;}` : '';
   const animCode = S.animation ? `mapG.selectAll('.area').style('animation-delay',(d,i)=>i*1.5+'ms');` : '';
 
-  // Leader lines label code
+  // Leader lines label code — FIX 4: angolo calcolato dal centroide verso l'esterno del SVG
   const labelCode = (S.lblVal || S.lblNome) ? `
   const labG=svgMap.append('g').attr('pointer-events','none');
   ${shadowFilter ? `svgMap.append('defs').html('${shadowFilter}');` : ''}
@@ -1732,35 +1781,46 @@ function doSearch(q){
     const c=path.centroid(feat);
     if(isNaN(c[0])||isNaN(c[1]))return;
     const bounds=path.bounds(feat);
-    const areaW=bounds[1][0]-bounds[0][0];
-    const areaH=bounds[1][1]-bounds[0][1];
+    const areaW=Math.max(1,bounds[1][0]-bounds[0][0]);
+    const areaH=Math.max(1,bounds[1][1]-bounds[0][1]);
     const fs=${lblFsCode};
-    const t=(v!==null&&maxVal>minVal)?(${S.scala==='logaritmica'?`Math.log(Math.max(1,v)/minVal)/Math.log(maxVal/minVal)`:S.scala==='quantili'?'0.5':`(v-minVal)/(maxVal-minVal)`}):0;
+    const t=(v!==null&&maxVal>minVal)?(${S.scala==='logaritmica'?`Math.log(Math.max(1,v)/Math.max(1,minVal))/Math.log(Math.max(2,maxVal/Math.max(1,minVal)))`:S.scala==='quantili'?'0.5':`(v-minVal)/Math.max(1,maxVal-minVal)`}):0;
     const tc=${lblColorCode};
     const lines=[];
-    ${S.lblNome ? `lines.push(name.length>7?name.slice(0,6)+'…':name);` : ''}
+    ${S.lblNome ? `lines.push(name.length>8?name.slice(0,7)+'…':name);` : ''}
     ${S.lblVal ? `lines.push(v!==null?fmt(v):'');` : ''}
     const validLines=lines.filter(Boolean);
     if(!validLines.length)return;
-    const textW=validLines.reduce((mx,l)=>Math.max(mx,l.length),0)*fs*.6;
-    const useLeader=${S.lblPos === 'leader' ? 'true' : 'false'} && textW>areaW*.85;
+    const maxChars=validLines.reduce((mx,l)=>Math.max(mx,l.length),0);
+    const textW=maxChars*fs*0.62;
+    const useLeader=${S.lblPos === 'leader' ? 'true' : 'false'} && (textW>areaW*0.9 || areaW<18);
     if(useLeader){
-      // leader line: point outside bbox
-      const angle=Math.atan2(c[1]-bounds[0][1],c[0]-bounds[0][0]);
-      const dist=Math.max(areaW,areaH)*0.7+8;
-      const tx=c[0]+Math.cos(angle)*dist;
-      const ty=c[1]+Math.sin(angle)*dist;
-      labG.append('line').attr('x1',c[0]).attr('y1',c[1]).attr('x2',tx).attr('y2',ty).attr('stroke','#888').attr('stroke-width',.5).attr('stroke-dasharray','2,2');
-      labG.append('circle').attr('cx',c[0]).attr('cy',c[1]).attr('r',1.5).attr('fill','#888');
+      // Angolo: dal centroide verso il bordo più vicino del SVG
+      const ang=Math.atan2(c[1]-H/2, c[0]-W/2);
+      const dist=Math.max(areaW,areaH)*0.6+20;
+      const tx=c[0]+Math.cos(ang)*dist;
+      const ty=c[1]+Math.sin(ang)*dist;
+      const anchor=tx>W/2?'end':'start';
+      labG.append('line').attr('x1',c[0]).attr('y1',c[1]).attr('x2',tx).attr('y2',ty)
+        .attr('stroke','#888').attr('stroke-width',.6);
+      labG.append('circle').attr('cx',c[0]).attr('cy',c[1]).attr('r',1.8).attr('fill','#888');
       validLines.forEach((l,li)=>{
-        const el=labG.append('text').attr('x',tx).attr('y',ty+(li-(validLines.length-1)/2)*fs*1.2).attr('text-anchor',tx>W/2?'end':'start').attr('dominant-baseline','middle').attr('font-size',fs).attr('fill',tc).text(l);
+        const el=labG.append('text')
+          .attr('x',tx+(anchor==='start'?3:-3))
+          .attr('y',ty+(li-(validLines.length-1)/2)*fs*1.3)
+          .attr('text-anchor',anchor)
+          .attr('dominant-baseline','middle')
+          .attr('font-size',fs).attr('fill',tc).text(l);
         ${S.lblBold ? `el.attr('font-weight','700');` : ''}
         ${S.lblShadow ? `el.attr('filter','url(#lbl-shadow)');` : ''}
       });
     } else {
       ${bgRect}
       validLines.forEach((l,li)=>{
-        const el=labG.append('text').attr('x',c[0]).attr('y',c[1]+(li-(validLines.length-1)/2)*fs*1.2).attr('text-anchor','middle').attr('dominant-baseline','middle').attr('font-size',fs).attr('fill',tc).text(l);
+        const el=labG.append('text')
+          .attr('x',c[0]).attr('y',c[1]+(li-(validLines.length-1)/2)*fs*1.3)
+          .attr('text-anchor','middle').attr('dominant-baseline','middle')
+          .attr('font-size',fs).attr('fill',tc).text(l);
         ${S.lblBold ? `el.attr('font-weight','700');` : ''}
         ${S.lblShadow ? `el.attr('filter','url(#lbl-shadow)');` : ''}
       });
@@ -1827,6 +1887,7 @@ ${S.highlights.length ? buildHighlightCSS() : ''}
 ${S.slider ? `<div class="slider-wrap"><div class="slider-card"><span class="slab">🎚 Filtra:</span><div class="sinp"><input type="range" id="s-lo"><input type="range" id="s-hi"></div><span id="sval">tutti</span><button class="btn-r" id="s-reset">↺</button></div></div>` : ''}
 <div class="toolbar">
   ${searchHTML}
+  ${switchHTML}
   ${exportHTML}
   ${S.zoom ? `<span style="font-size:.75rem;color:var(--sub);">🔍 Scroll = zoom · Trascina = muovi mappa</span>` : ''}
 </div>
@@ -1879,7 +1940,6 @@ function buildLegend(cs,mn,mx,fmt){const c=document.getElementById('leg');const 
 // Legenda step (fasce discrete)
 function buildStepLegend(thresholds,colors,labels,fmt){const c=document.getElementById('leg');const n=colors.length;const w=Math.floor(264/n);const svg=d3.select(c).append('svg').attr('width','100%').attr('height',54).attr('viewBox','0 0 280 54');colors.forEach((col,i)=>{svg.append('rect').attr('x',8+i*w).attr('y',6).attr('width',w).attr('height',14).attr('fill',col);const lo=i===0?null:thresholds[i-1];const hi=i===thresholds.length?null:thresholds[i];const lbl=labels[i]||(lo===null?'< '+fmt(hi):hi===undefined?'> '+fmt(lo):fmt(lo)+' – '+fmt(hi));svg.append('text').attr('x',8+i*w+w/2).attr('y',38).attr('text-anchor','middle').attr('font-size','8.5px').attr('fill','var(--sub)').text(lbl.length>10?lbl.slice(0,9)+'…':lbl);});}
 ${legendCode}
-${isDash ? buildDashboardChartCode(DATA_OBJ, accentColor) : ''}
 const GEO_URL='${geo.url}';
 const GEO_PROP='${geo.prop}';
 const W=860,H=1000;
@@ -1929,8 +1989,10 @@ fetch(GEO_URL).then(r=>{if(!r.ok)throw new Error('HTTP '+r.status);return r.json
   ${searchCode}
   ${hlCode}
   ${S.click ? `document.addEventListener('click',()=>{document.getElementById('det').style.display='none';});` : ''}
+  ${isDash ? buildDashboardChartCode(DATA_OBJ, accentColor) : ''}
 }).catch(err=>{document.getElementById('loading').innerHTML='<p style="color:#c00;padding:30px;text-align:center;">⚠️ Errore caricamento mappa<br><small>'+err.message+'</small><br><br>Verificare la connessione internet.</p>';});
 ${exportCode}
+${switchCode}
 <\/script>
 </body>
 </html>`;
@@ -1947,20 +2009,41 @@ function buildSliderCode(S, accentColor) {
 
 function buildHighlightCSS() {
   return S.highlights.map(h => {
-    if (h.style === 'hatch') return `.hl-hatch-${h.id}{fill:url(#hatch-${h.id});}`;
+    if (h.style === 'hatch') return `.hl-hatch-${h.id}{fill:url(#hatch-${h.id})!important;}`;
     return '';
   }).join('');
 }
+
 function buildHighlightCode() {
+  if (!S.highlights.length) return '';
   return S.highlights.map(h => {
-    if (h.style === 'hatch') {
-      return `(function(){const defs=svgMap.select('defs').empty()?svgMap.append('defs'):svgMap.select('defs');defs.append('pattern').attr('id','hatch-${h.id}').attr('patternUnits','userSpaceOnUse').attr('width',6).attr('height',6).append('path').attr('d','M-1,1 l2,-2 M0,6 l6,-6 M5,7 l2,-2').attr('stroke','${h.color}').attr('stroke-width',1.2);})();`;
+    const hid = h.id;
+    const col = h.color;
+    const n = h.n;
+    const type = h.type;
+    const style = h.style;
+    // Filtro: seleziona le aree del gruppo
+    const filterExpr = `d=>{const hs=getHLStyle(d.properties[GEO_PROP]||'');return hs&&hs.id===${hid};}`;
+    if (style === 'border') {
+      return `mapG.selectAll('.area').filter(${filterExpr}).attr('stroke','${col}').attr('stroke-width',3);`;
     }
-    if (h.style === 'bright') {
-      return `mapG.selectAll('.area').filter(d=>{const h=getHLStyle(d.properties[GEO_PROP]||'');return h&&h.id===${h.id};}).style('filter','brightness(1.3)');`;
+    if (style === 'hatch') {
+      return `
+(function(){
+  const defs=svgMap.select('defs').empty()?svgMap.append('defs'):svgMap.select('defs');
+  defs.append('pattern').attr('id','hatch-${hid}').attr('patternUnits','userSpaceOnUse').attr('width',6).attr('height',6)
+    .append('path').attr('d','M-1,1 l2,-2 M0,6 l6,-6 M5,7 l2,-2').attr('stroke','${col}').attr('stroke-width',1.5);
+  mapG.selectAll('.area').filter(${filterExpr}).attr('fill','url(#hatch-${hid})').attr('stroke','${col}').attr('stroke-width',1.5);
+})();`;
+    }
+    if (style === 'pulse') {
+      return `mapG.selectAll('.area').filter(${filterExpr}).attr('stroke','${col}').attr('stroke-width',3).classed('hl-pulse',true);`;
+    }
+    if (style === 'bright') {
+      return `mapG.selectAll('.area').filter(${filterExpr}).style('filter','brightness(1.4) saturate(1.3)').attr('stroke','${col}').attr('stroke-width',2);`;
     }
     return '';
-  }).join('');
+  }).join('\n');
 }
 
 function buildDashboardChartCode(dataObj, accent) {
@@ -1973,9 +2056,20 @@ function buildDashboardChartCode(dataObj, accent) {
   let tnord=0,tcentro=0,tsud=0;
   Object.entries(dataObj).forEach(([k,v])=>{const u=k.toUpperCase();if(NORD.includes(u))tnord+=v;else if(CENTRO.includes(u))tcentro+=v;else tsud+=v;});
   const body = sorted.map(([k,v],i)=>`<tr><td style="color:var(--sub);font-size:.68rem">${i+1}</td><td>${k}</td><td class="td-r">${v.toLocaleString('it-IT')}</td><td class="td-s">${((v/total)*100).toFixed(1)}%</td></tr>`).join('');
+  // I colori delle barre vengono calcolati a runtime dopo che getColor è disponibile
   return `document.getElementById('rank-body').innerHTML=\`${body}\`;
-(function(){new Chart(document.getElementById('c-top').getContext('2d'),{type:'bar',data:{labels:${JSON.stringify(top10.map(([k])=>k))},datasets:[{data:${JSON.stringify(top10.map(([,v])=>v))},backgroundColor:${JSON.stringify(top10.map(([,v])=>v))}.map(v=>getColor(v)),borderRadius:3,borderSkipped:false}]},options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>' '+c.raw.toLocaleString('it-IT')}}},scales:{x:{grid:{color:'rgba(0,0,0,.04)'},ticks:{font:{size:9},callback:v=>v>=1000?Math.round(v/1000)+'k':v}},y:{grid:{display:false},ticks:{font:{size:9}}}}}});})();
-(function(){new Chart(document.getElementById('c-bot').getContext('2d'),{type:'bar',data:{labels:${JSON.stringify(bot10.map(([k])=>k))},datasets:[{data:${JSON.stringify(bot10.map(([,v])=>v))},backgroundColor:${JSON.stringify(bot10.map(([,v])=>v))}.map(v=>getColor(v)),borderRadius:3,borderSkipped:false}]},options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>' '+c.raw.toLocaleString('it-IT')}}},scales:{x:{grid:{color:'rgba(0,0,0,.04)'},ticks:{font:{size:9}}},y:{grid:{display:false},ticks:{font:{size:9}}}}}});})();
+(function(){
+  const topVals=${JSON.stringify(top10.map(([,v])=>v))};
+  const topLabels=${JSON.stringify(top10.map(([k])=>k))};
+  const topColors=topVals.map(v=>getColor(v));
+  new Chart(document.getElementById('c-top').getContext('2d'),{type:'bar',data:{labels:topLabels,datasets:[{data:topVals,backgroundColor:topColors,borderRadius:3,borderSkipped:false}]},options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>' '+c.raw.toLocaleString('it-IT')}}},scales:{x:{grid:{color:'rgba(0,0,0,.04)'},ticks:{font:{size:9},callback:v=>v>=1000?Math.round(v/1000)+'k':v}},y:{grid:{display:false},ticks:{font:{size:9}}}}}});
+})();
+(function(){
+  const botVals=${JSON.stringify(bot10.map(([,v])=>v))};
+  const botLabels=${JSON.stringify(bot10.map(([k])=>k))};
+  const botColors=botVals.map(v=>getColor(v));
+  new Chart(document.getElementById('c-bot').getContext('2d'),{type:'bar',data:{labels:botLabels,datasets:[{data:botVals,backgroundColor:botColors,borderRadius:3,borderSkipped:false}]},options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>' '+c.raw.toLocaleString('it-IT')}}},scales:{x:{grid:{color:'rgba(0,0,0,.04)'},ticks:{font:{size:9}}},y:{grid:{display:false},ticks:{font:{size:9}}}}}});
+})();
 (function(){new Chart(document.getElementById('c-macro').getContext('2d'),{type:'doughnut',data:{labels:['Nord','Centro','Sud+Isole'],datasets:[{data:[${tnord},${tcentro},${tsud}],backgroundColor:['${accent}','rgba(91,143,255,.55)','rgba(91,143,255,.25)'],borderWidth:2,borderColor:'#fff'}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{font:{size:10},padding:8}},tooltip:{callbacks:{label:c=>\` \${c.label}: \${c.raw.toLocaleString('it-IT')} (\${((c.raw/${total})*100).toFixed(1)}%)\`}}}}}); })();`;
 }
 
