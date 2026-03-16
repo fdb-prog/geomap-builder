@@ -1776,21 +1776,21 @@ function switchData(n){
   const animCSS = S.animation ? `@keyframes fadeInProv{from{opacity:0}to{opacity:1}}.area{animation:fadeInProv .5s ease forwards;opacity:0;}` : '';
   const animCode = S.animation ? `mapG.selectAll('.area').style('animation-delay',(d,i)=>i*1.5+'ms');` : '';
 
-  // ── LABEL CODE ──
+  // Leader lines label code
   const labelCode = (S.lblVal || S.lblNome || S.lblSigla) ? `
   const labG=svgMap.append('g').attr('pointer-events','none');
   ${shadowFilter ? `(function(){const defs=svgMap.select('defs').empty()?svgMap.append('defs'):svgMap.select('defs');defs.html(defs.html()+'${shadowFilter.replace(/'/g,"\\'")}');})();` : ''}
 
-  // ── 1. Bounding box reale mappa ──
+  // Bounding box reale della mappa
   let mX0=Infinity,mY0=Infinity,mX1=-Infinity,mY1=-Infinity;
   geoData.features.forEach(feat=>{
     const b=path.bounds(feat);
-    mX0=Math.min(mX0,b[0][0]); mY0=Math.min(mY0,b[0][1]);
-    mX1=Math.max(mX1,b[1][0]); mY1=Math.max(mY1,b[1][1]);
+    if(b[0][0]<mX0)mX0=b[0][0]; if(b[0][1]<mY0)mY0=b[0][1];
+    if(b[1][0]>mX1)mX1=b[1][0]; if(b[1][1]>mY1)mY1=b[1][1];
   });
-  const MP=18; // margine label dal bordo mappa
+  const MAP_PAD=16;
 
-  // ── 2. Raccoglie item ──
+  // PASSATA 1: raccoglie tutti gli item
   const allLblItems=[];
   geoData.features.forEach(feat=>{
     const name=feat.properties[GEO_PROP]||'';
@@ -1813,117 +1813,130 @@ function switchData(n){
     const maxChars=validLines.reduce((mx,l)=>Math.max(mx,l.length),0);
     const textW=maxChars*fs*0.64;
     const textH=validLines.length*fs*1.45;
-    const useLeader=${S.lblPos==='leader'?'true':'false'} && (textW>areaW*0.82||areaW<20||areaH<14);
+    const useLeader=${S.lblPos === 'leader' ? 'true' : 'false'} && (textW>areaW*0.82||areaW<20||areaH<14);
 
-    // FIX VERCELLI: il dot e il punto di partenza della linea NON sono il centroide
-    // ma il punto del BORDO DEL BBOX della provincia più vicino al bordo mappa.
-    // Così province con centroide spostato (Vercelli abbraccia Biella) funzionano.
-    let lsX=c[0], lsY=c[1];
+    // Punto di partenza della linea: NON il centroide ma il punto del
+    // PERIMETRO della provincia più vicino al bordo mappa di destinazione.
+    // Questo risolve Vercelli/Biella e casi simili dove il centroide
+    // cade dentro un'altra provincia.
+    let lineStartX=c[0], lineStartY=c[1];
     if(useLeader){
+      // Qual è il bordo mappa più vicino al centroide?
       const dL=c[0]-mX0, dR=mX1-c[0], dT=c[1]-mY0, dB=mY1-c[1];
-      const m=Math.min(dL,dR,dT,dB);
-      if(m===dL){lsX=bounds[0][0]; lsY=c[1];}
-      else if(m===dR){lsX=bounds[1][0]; lsY=c[1];}
-      else if(m===dT){lsX=c[0]; lsY=bounds[0][1];}
-      else{lsX=c[0]; lsY=bounds[1][1];}
+      const minD=Math.min(dL,dR,dT,dB);
+      // Usa il punto del bounding box della provincia sul lato corretto
+      if(minD===dL){ lineStartX=bounds[0][0]; lineStartY=c[1]; }
+      else if(minD===dR){ lineStartX=bounds[1][0]; lineStartY=c[1]; }
+      else if(minD===dT){ lineStartX=c[0]; lineStartY=bounds[0][1]; }
+      else { lineStartX=c[0]; lineStartY=bounds[1][1]; }
     }
-    allLblItems.push({name,v,c,lsX,lsY,areaW,areaH,fs,tc,validLines,textW,textH,useLeader});
+
+    allLblItems.push({name,sigla,v,c,lineStartX,lineStartY,areaW,areaH,fs,tc,validLines,textW,textH,bounds,useLeader});
   });
 
-  // ── 3. Assegna bordo a ogni leader ──
-  // 0=Sinistra 1=Destra 2=Top 3=Bottom
-  function getSide(lsX,lsY){
-    const dL=lsX-mX0,dR=mX1-lsX,dT=lsY-mY0,dB=mY1-lsY;
+  // PASSATA 2: assegna bordo a ogni leader, poi ordina per posizione
+  // per garantire ZERO incroci (label in ordine spaziale = linee in ordine spaziale)
+  function assignSide(lsX,lsY){
+    const dL=lsX-mX0, dR=mX1-lsX, dT=lsY-mY0, dB=mY1-lsY;
     const m=Math.min(dL,dR,dT,dB);
-    return m===dL?0:m===dR?1:m===dT?2:3;
+    if(m===dL)return 0; if(m===dR)return 1; if(m===dT)return 2; return 3;
   }
-  const leaders=allLblItems.filter(i=>i.useLeader);
-  leaders.forEach(i=>{ i.side=getSide(i.lsX,i.lsY); });
-
-  // ── 4. Ridistribuisce overflow: top/bottom hanno spazio limitato ──
-  const mapW=mX1-mX0;
-  // Stima larghezza media label
-  const avgW=leaders.length?leaders.reduce((s,i)=>s+i.textW,0)/leaders.length:40;
-  const maxTopBot=Math.max(3,Math.floor(mapW/(avgW+6)));
-
-  [2,3].forEach(side=>{
-    const grp=leaders.filter(i=>i.side===side);
-    if(grp.length<=maxTopBot)return;
-    // Ordina: i più lontani dal bordo (linea più lunga) vengono spostati ai lati
-    grp.sort((a,b)=>side===2?(a.lsY-mY0)-(b.lsY-mY0):(mY1-a.lsY)-(mY1-b.lsY));
-    grp.slice(maxTopBot).forEach(item=>{
-      item.side=item.lsX-mX0<mX1-item.lsX?0:1;
-    });
+  // Pre-assegna il bordo a tutti i leader
+  allLblItems.forEach(item=>{
+    if(item.useLeader) item.side=assignSide(item.lineStartX,item.lineStartY);
   });
 
-  // ── 5. Raggruppa e ordina per posizione ──
-  // CHIAVE ANTI-INCROCI: ordinando per posizione sorgente e assegnando
-  // le label nello stesso ordine, le linee non si incrociano MAI.
-  const byBorder={0:[],1:[],2:[],3:[]};
-  leaders.forEach(i=>byBorder[i.side].push(i));
-  byBorder[0].sort((a,b)=>a.lsY-b.lsY); // L: alto→basso
-  byBorder[1].sort((a,b)=>a.lsY-b.lsY); // R: alto→basso
-  byBorder[2].sort((a,b)=>a.lsX-b.lsX); // T: sinistra→destra
-  byBorder[3].sort((a,b)=>a.lsX-b.lsX); // B: sinistra→destra
+  // Conta quante label per bordo — il bordo top (2) si satura facilmente
+  // Se una label va al bordo top ma ce ne sono già troppe, mandala al bordo laterale
+  const sideCount={0:0,1:0,2:0,3:0};
+  const maxPerBorder={0:999,1:999,2:12,3:999}; // max 12 in top
+  allLblItems.forEach(item=>{
+    if(!item.useLeader)return;
+    sideCount[item.side]++;
+    if(item.side===2 && sideCount[2]>maxPerBorder[2]){
+      // Ridirigi al bordo laterale più vicino
+      const dL=item.lineStartX-mX0, dR=mX1-item.lineStartX;
+      item.side=dL<dR?0:1;
+    }
+  });
 
-  // ── 6. Pack consecutivo — assegna posizioni in ordine, zero incroci ──
-  function packBorder(items,side){
-    if(!items.length)return;
+  // Ordina: prima inline, poi leader raggruppati per bordo e
+  // ordinati per posizione LUNGO quel bordo (no incroci garantiti)
+  allLblItems.sort((a,b)=>{
+    if(!a.useLeader&&!b.useLeader)return 0;
+    if(!a.useLeader)return -1;
+    if(!b.useLeader)return 1;
+    if(a.side!==b.side)return a.side-b.side;
+    // Stesso bordo: ordina per posizione lungo il bordo
+    if(a.side===0||a.side===1) return a.lineStartY-b.lineStartY;
+    return a.lineStartX-b.lineStartX;
+  });
+
+  // Pack consecutivo per bordo — le label vengono posizionate
+  // nell'ordine esatto in cui arrivano (già ordinate per posizione sorgente).
+  // Questo garantisce ZERO incroci: linee ordinate = label ordinate.
+  const borderCursor={0:mY0+2, 1:mY0+2, 2:mX0+2, 3:mX0+2};
+  const GAP=3;
+
+  function assignBorderPos(side,textW,textH){
     const isV=(side===0||side===1);
+    const size=isV?textH:textW;
     const lo=isV?mY0+2:mX0+2;
     const hi=isV?mY1-2:mX1-2;
-    const gap=3;
-    const totalSz=items.reduce((s,i)=>s+(isV?i.textH:i.textW)+gap,0);
-    // Centro naturale del gruppo
-    const ctr=items.reduce((s,i)=>s+(isV?i.lsY:i.lsX),0)/items.length;
-    let cur=Math.max(lo,Math.min(hi-totalSz,ctr-totalSz/2));
-    items.forEach(item=>{
-      const sz=isV?item.textH:item.textW;
-      // Coordinate label e punto di attacco linea
-      if(side===0){item.lx=mX0-MP-item.textW;item.ly=cur;item.ex=mX0-MP+2;item.ey=cur+item.textH/2;}
-      else if(side===1){item.lx=mX1+MP;item.ly=cur;item.ex=mX1+MP-2;item.ey=cur+item.textH/2;}
-      else if(side===2){item.lx=cur;item.ly=mY0-MP-item.textH;item.ex=cur+item.textW/2;item.ey=mY0-MP+2;}
-      else{item.lx=cur;item.ly=mY1+MP;item.ex=cur+item.textW/2;item.ey=mY1+MP-2;}
-      cur+=sz+gap;
-    });
+    // Se il cursore è andato oltre il limite, torna all'inizio (wrap)
+    if(borderCursor[side]+size>hi) borderCursor[side]=lo;
+    const pos=borderCursor[side];
+    borderCursor[side]+=size+GAP;
+    let lx,ly,ex,ey;
+    if(side===0){lx=mX0-MAP_PAD-textW;ly=pos;ex=mX0-MAP_PAD+2;ey=pos+textH/2;}
+    else if(side===1){lx=mX1+MAP_PAD;ly=pos;ex=mX1+MAP_PAD-2;ey=pos+textH/2;}
+    else if(side===2){lx=pos;ly=mY0-MAP_PAD-textH;ex=pos+textW/2;ey=mY0-MAP_PAD+2;}
+    else{lx=pos;ly=mY1+MAP_PAD;ex=pos+textW/2;ey=mY1+MAP_PAD-2;}
+    return {lx,ly,ex,ey};
   }
-  [0,1,2,3].forEach(s=>packBorder(byBorder[s],s));
 
-  // ── 7. Disegna ──
+  // DISEGNA
   allLblItems.forEach(item=>{
-    const {c,lsX,lsY,fs,tc,validLines,textW,textH,useLeader,lx,ly,ex,ey}=item;
+    const {c,lineStartX,lineStartY,fs,tc,validLines,textW,textH,useLeader,side}=item;
 
     if(!useLeader){
-      // INLINE
-      ${S.lblBg?`labG.append('rect').attr('x',c[0]-textW/2-2).attr('y',c[1]-textH/2-1).attr('width',textW+4).attr('height',textH+2).attr('rx',2).attr('fill','rgba(255,255,255,0.55)');`:''}
+      // ── INLINE ──
+      ${S.lblBg ? `labG.append('rect').attr('x',c[0]-textW/2-2).attr('y',c[1]-textH/2-1).attr('width',textW+4).attr('height',textH+2).attr('rx',2).attr('fill','rgba(255,255,255,0.55)');` : ''}
       validLines.forEach((l,li)=>{
         const el=labG.append('text')
           .attr('x',c[0]).attr('y',c[1]+(li-(validLines.length-1)/2)*fs*1.45)
           .attr('text-anchor','middle').attr('dominant-baseline','middle')
           .attr('font-size',fs).attr('fill',tc).text(l);
-        ${S.lblBold?`el.attr('font-weight','700');`:''}
-        ${S.lblShadow?`el.attr('filter','url(#lbl-shadow)');`:''}
+        ${S.lblBold ? `el.attr('font-weight','700');` : ''}
+        ${S.lblShadow ? `el.attr('filter','url(#lbl-shadow)');` : ''}
       });
     } else {
-      if(lx===undefined)return;
-      // LEADER LINE: linea da bbox-edge provincia → punto vicino label
-      labG.append('line')
-        .attr('x1',lsX).attr('y1',lsY).attr('x2',ex).attr('y2',ey)
-        .attr('stroke','rgba(100,115,140,0.5)').attr('stroke-width',.75);
-      // Dot sul bordo della provincia (NON nel centroide — fix Vercelli)
-      labG.append('circle').attr('cx',lsX).attr('cy',lsY)
+      // ── LEADER LINE ──
+      const pos=assignBorderPos(side,textW,textH);
+      const {lx,ly,ex,ey}=pos;
+
+      // Linea: centroide → punto perimetro provincia → punto bordo mappa → label
+      // Se lineStart coincide col centroide usa linea diretta
+      const pts=(Math.abs(lineStartX-c[0])>2||Math.abs(lineStartY-c[1])>2)
+        ? \`\${c[0]},\${c[1]} \${lineStartX},\${lineStartY} \${ex},\${ey}\`
+        : \`\${c[0]},\${c[1]} \${ex},\${ey}\`;
+      labG.append('polyline').attr('points',pts)
+        .attr('stroke','rgba(100,115,140,0.5)').attr('stroke-width',.75)
+        .attr('fill','none').attr('stroke-linejoin','round');
+      labG.append('circle').attr('cx',c[0]).attr('cy',c[1])
         .attr('r',1.8).attr('fill','rgba(100,115,140,0.65)');
-      // Box label
+
+      // Box etichetta
       labG.append('rect').attr('x',lx-1).attr('y',ly-1)
-        .attr('width',textW+2).attr('height',textH+2).attr('rx',3)
-        .attr('fill','rgba(255,255,255,0.95)')
+        .attr('width',textW+2).attr('height',textH+2)
+        .attr('rx',3).attr('fill','rgba(255,255,255,0.95)')
         .attr('stroke','rgba(120,140,170,0.35)').attr('stroke-width',.6);
       validLines.forEach((l,li)=>{
         const el=labG.append('text')
           .attr('x',lx+textW/2).attr('y',ly+1+(li+0.5)*fs*1.45)
           .attr('text-anchor','middle').attr('dominant-baseline','middle')
           .attr('font-size',fs).attr('fill','#1e2840').text(l);
-        ${S.lblBold?`el.attr('font-weight','700');`:''}
+        ${S.lblBold ? `el.attr('font-weight','700');` : ''}
       });
     }
   });` : '';
