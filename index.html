@@ -1776,7 +1776,7 @@ function switchData(n){
   const animCSS = S.animation ? `@keyframes fadeInProv{from{opacity:0}to{opacity:1}}.area{animation:fadeInProv .5s ease forwards;opacity:0;}` : '';
   const animCode = S.animation ? `mapG.selectAll('.area').style('animation-delay',(d,i)=>i*1.5+'ms');` : '';
 
-  // Leader lines label code — sistema a gomito ortogonale
+  // Leader lines label code
   const labelCode = (S.lblVal || S.lblNome || S.lblSigla) ? `
   const labG=svgMap.append('g').attr('pointer-events','none');
   ${shadowFilter ? `(function(){const defs=svgMap.select('defs').empty()?svgMap.append('defs'):svgMap.select('defs');defs.html(defs.html()+'${shadowFilter.replace(/'/g,"\\'")}');})();` : ''}
@@ -1788,13 +1788,13 @@ function switchData(n){
     if(b[0][0]<mX0)mX0=b[0][0]; if(b[0][1]<mY0)mY0=b[0][1];
     if(b[1][0]>mX1)mX1=b[1][0]; if(b[1][1]>mY1)mY1=b[1][1];
   });
-  const MAP_PAD=14;
+  const MAP_PAD=16;
 
-  // Raccoglie tutti gli item con le dimensioni
+  // PASSATA 1: raccoglie tutti gli item
   const allLblItems=[];
   geoData.features.forEach(feat=>{
     const name=feat.properties[GEO_PROP]||'';
-    const sigla=feat.properties['prov_acr']||feat.properties['sigla']||feat.properties['cod_prov']||'';
+    const sigla=feat.properties['prov_acr']||feat.properties['sigla']||'';
     const v=lookup(name);
     const c=path.centroid(feat);
     if(isNaN(c[0])||isNaN(c[1]))return;
@@ -1813,81 +1813,101 @@ function switchData(n){
     const maxChars=validLines.reduce((mx,l)=>Math.max(mx,l.length),0);
     const textW=maxChars*fs*0.64;
     const textH=validLines.length*fs*1.45;
-    const useLeader=${S.lblPos === 'leader' ? 'true' : 'false'} && (textW>areaW*0.85||areaW<20||areaH<14);
+    const useLeader=${S.lblPos === 'leader' ? 'true' : 'false'} && (textW>areaW*0.82||areaW<20||areaH<14);
 
-    // FIX BIELLA/VERCELLI: usa il punto del bordo provincia più vicino al bordo mappa
-    // invece del centroide — così province "dentro" altre trovano il bordo corretto
-    let anchorX=c[0], anchorY=c[1];
+    // Punto di partenza della linea: NON il centroide ma il punto del
+    // PERIMETRO della provincia più vicino al bordo mappa di destinazione.
+    // Questo risolve Vercelli/Biella e casi simili dove il centroide
+    // cade dentro un'altra provincia.
+    let lineStartX=c[0], lineStartY=c[1];
     if(useLeader){
+      // Qual è il bordo mappa più vicino al centroide?
       const dL=c[0]-mX0, dR=mX1-c[0], dT=c[1]-mY0, dB=mY1-c[1];
       const minD=Math.min(dL,dR,dT,dB);
-      if(minD===dL){ anchorX=bounds[0][0]; anchorY=c[1]; }
-      else if(minD===dR){ anchorX=bounds[1][0]; anchorY=c[1]; }
-      else if(minD===dT){ anchorX=c[0]; anchorY=bounds[0][1]; }
-      else { anchorX=c[0]; anchorY=bounds[1][1]; }
+      // Usa il punto del bounding box della provincia sul lato corretto
+      if(minD===dL){ lineStartX=bounds[0][0]; lineStartY=c[1]; }
+      else if(minD===dR){ lineStartX=bounds[1][0]; lineStartY=c[1]; }
+      else if(minD===dT){ lineStartX=c[0]; lineStartY=bounds[0][1]; }
+      else { lineStartX=c[0]; lineStartY=bounds[1][1]; }
     }
 
-    allLblItems.push({name,sigla,v,c,anchorX,anchorY,areaW,areaH,fs,tc,validLines,textW,textH,bounds,useLeader});
+    allLblItems.push({name,sigla,v,c,lineStartX,lineStartY,areaW,areaH,fs,tc,validLines,textW,textH,bounds,useLeader});
   });
 
-  // Ordina per posizione (top→bottom, left→right) per evitare incroci
-  // Le leader dello stesso bordo vengono piazzate nello stesso ordine spaziale
+  // PASSATA 2: assegna bordo a ogni leader, poi ordina per posizione
+  // per garantire ZERO incroci (label in ordine spaziale = linee in ordine spaziale)
+  function assignSide(lsX,lsY){
+    const dL=lsX-mX0, dR=mX1-lsX, dT=lsY-mY0, dB=mY1-lsY;
+    const m=Math.min(dL,dR,dT,dB);
+    if(m===dL)return 0; if(m===dR)return 1; if(m===dT)return 2; return 3;
+  }
+  // Pre-assegna il bordo a tutti i leader
+  allLblItems.forEach(item=>{
+    if(item.useLeader) item.side=assignSide(item.lineStartX,item.lineStartY);
+  });
+
+  // Conta quante label per bordo — il bordo top (2) si satura facilmente
+  // Se una label va al bordo top ma ce ne sono già troppe, mandala al bordo laterale
+  const sideCount={0:0,1:0,2:0,3:0};
+  const maxPerBorder={0:999,1:999,2:12,3:999}; // max 12 in top
+  allLblItems.forEach(item=>{
+    if(!item.useLeader)return;
+    sideCount[item.side]++;
+    if(item.side===2 && sideCount[2]>maxPerBorder[2]){
+      // Ridirigi al bordo laterale più vicino
+      const dL=item.lineStartX-mX0, dR=mX1-item.lineStartX;
+      item.side=dL<dR?0:1;
+    }
+  });
+
+  // Ordina: prima inline, poi leader raggruppati per bordo e
+  // ordinati per posizione LUNGO quel bordo (no incroci garantiti)
   allLblItems.sort((a,b)=>{
     if(!a.useLeader&&!b.useLeader)return 0;
     if(!a.useLeader)return -1;
     if(!b.useLeader)return 1;
-    // Ordina per quale bordo andrà (in base ad anchorX/Y) poi per posizione lungo quel bordo
-    const sideA=getSide(a.anchorX,a.anchorY);
-    const sideB=getSide(b.anchorX,b.anchorY);
-    if(sideA!==sideB)return sideA-sideB;
-    if(sideA===0||sideA===1) return a.anchorY-b.anchorY; // L/R: ordina per Y
-    return a.anchorX-b.anchorX; // T/B: ordina per X
+    if(a.side!==b.side)return a.side-b.side;
+    // Stesso bordo: ordina per posizione lungo il bordo
+    if(a.side===0||a.side===1) return a.lineStartY-b.lineStartY;
+    return a.lineStartX-b.lineStartX;
   });
-  function getSide(ax,ay){
-    const dL=ax-mX0,dR=mX1-ax,dT=ay-mY0,dB=mY1-ay;
-    const m=Math.min(dL,dR,dT,dB);
-    if(m===dL)return 0; if(m===dR)return 1; if(m===dT)return 2; return 3;
-  }
 
-  // Slot occupati per bordo — collision detection solo tra leader
+  // Slot occupati per bordo (collision detection)
   const slots={0:[],1:[],2:[],3:[]};
-  function slotFree(side,pos,size){
-    return !slots[side].some(s=>pos+size+2>s.p&&pos-2<s.p+s.s);
+  function slotFree(s,pos,size){
+    return !slots[s].some(o=>pos+size+2>o.p&&pos-2<o.p+o.s);
   }
-  function addSlot(side,pos,size){slots[side].push({p:pos,s:size});}
+  function addSlot(s,pos,size){slots[s].push({p:pos,s:size});}
 
-  function findBorderPos(ax,ay,textW,textH){
-    const dL=ax-mX0, dR=mX1-ax, dT=ay-mY0, dB=mY1-ay;
-    const sides=[
-      {s:0,d:dL},{s:1,d:dR},{s:2,d:dT},{s:3,d:dB}
-    ].sort((a,b)=>a.d-b.d);
-
-    for(const {s} of sides){
-      const isVert=(s===0||s===1);
-      const basePos=isVert ? ay-textH/2 : ax-textW/2;
-      const size=isVert ? textH : textW;
-      const lo=isVert ? mY0 : mX0;
-      const hi=isVert ? mY1-size : mX1-size;
-      const step=size+5;
-      const tries=[0,1,-1,2,-2,3,-3,4,-4,5,-5,6,-6,8,-8,10,-10];
-      for(const delta of tries){
-        const pos=Math.max(lo,Math.min(hi,basePos+delta*step));
-        if(slotFree(s,pos,size)){
-          addSlot(s,pos,size);
+  function findBorderPos(lsX,lsY,side,textW,textH){
+    const isVert=(side===0||side===1);
+    const basePos=isVert ? lsY-textH/2 : lsX-textW/2;
+    const size=isVert ? textH : textW;
+    const lo=isVert ? mY0+2 : mX0+2;
+    const hi=isVert ? mY1-size-2 : mX1-size-2;
+    // Prova basePos poi scorre in entrambe le direzioni (±1,±2,±3...)
+    const step=size+4;
+    for(let i=0;i<=16;i++){
+      const dirs=i===0?[0]:[i,-i];
+      for(const d of dirs){
+        const pos=Math.max(lo,Math.min(hi,basePos+d*step));
+        if(slotFree(side,pos,size)){
+          addSlot(side,pos,size);
           let lx,ly,ex,ey;
-          if(s===0){lx=mX0-MAP_PAD-textW;ly=pos;ex=mX0-MAP_PAD+2;ey=pos+textH/2;}
-          else if(s===1){lx=mX1+MAP_PAD;ly=pos;ex=mX1+MAP_PAD-2;ey=pos+textH/2;}
-          else if(s===2){lx=pos;ly=mY0-MAP_PAD-textH;ex=pos+textW/2;ey=mY0-MAP_PAD+2;}
+          if(side===0){lx=mX0-MAP_PAD-textW;ly=pos;ex=mX0-MAP_PAD+2;ey=pos+textH/2;}
+          else if(side===1){lx=mX1+MAP_PAD;ly=pos;ex=mX1+MAP_PAD-2;ey=pos+textH/2;}
+          else if(side===2){lx=pos;ly=mY0-MAP_PAD-textH;ex=pos+textW/2;ey=mY0-MAP_PAD+2;}
           else{lx=pos;ly=mY1+MAP_PAD;ex=pos+textW/2;ey=mY1+MAP_PAD-2;}
-          return {lx,ly,ex,ey,s};
+          return {lx,ly,ex,ey};
         }
       }
     }
     return null;
   }
 
+  // DISEGNA
   allLblItems.forEach(item=>{
-    const {c,anchorX,anchorY,fs,tc,validLines,textW,textH,useLeader}=item;
+    const {c,lineStartX,lineStartY,fs,tc,validLines,textW,textH,useLeader,side}=item;
 
     if(!useLeader){
       // ── INLINE ──
@@ -1902,26 +1922,26 @@ function switchData(n){
       });
     } else {
       // ── LEADER LINE ──
-      const pos=findBorderPos(anchorX,anchorY,textW,textH);
+      const pos=findBorderPos(lineStartX,lineStartY,side,textW,textH);
       if(!pos)return;
-      const {lx,ly,ex,ey,s}=pos;
-      const lcx=lx+(s===1?0:s===0?textW:textW/2);
-      const lcy=ly+(s===3?0:s===2?textH:textH/2);
+      const {lx,ly,ex,ey}=pos;
 
-      // Linea: dal centroide → bordo provincia → label
-      labG.append('polyline')
-        .attr('points',\`\${c[0]},\${c[1]} \${anchorX},\${anchorY} \${ex},\${ey}\`)
-        .attr('stroke','rgba(100,115,140,0.55)').attr('stroke-width',.75)
+      // Linea: centroide → punto perimetro provincia → punto bordo mappa → label
+      // Se lineStart coincide col centroide usa linea diretta
+      const pts=(Math.abs(lineStartX-c[0])>2||Math.abs(lineStartY-c[1])>2)
+        ? \`\${c[0]},\${c[1]} \${lineStartX},\${lineStartY} \${ex},\${ey}\`
+        : \`\${c[0]},\${c[1]} \${ex},\${ey}\`;
+      labG.append('polyline').attr('points',pts)
+        .attr('stroke','rgba(100,115,140,0.5)').attr('stroke-width',.75)
         .attr('fill','none').attr('stroke-linejoin','round');
-      labG.append('circle').attr('cx',c[0]).attr('cy',c[1]).attr('r',1.8).attr('fill','rgba(100,115,140,0.7)');
+      labG.append('circle').attr('cx',c[0]).attr('cy',c[1])
+        .attr('r',1.8).attr('fill','rgba(100,115,140,0.65)');
 
-      // Box etichetta — stile pill arrotondato
+      // Box etichetta
       labG.append('rect').attr('x',lx-1).attr('y',ly-1)
         .attr('width',textW+2).attr('height',textH+2)
-        .attr('rx',3).attr('ry',3)
-        .attr('fill','rgba(255,255,255,0.95)')
-        .attr('stroke','rgba(120,140,170,0.4)').attr('stroke-width',.6);
-
+        .attr('rx',3).attr('fill','rgba(255,255,255,0.95)')
+        .attr('stroke','rgba(120,140,170,0.35)').attr('stroke-width',.6);
       validLines.forEach((l,li)=>{
         const el=labG.append('text')
           .attr('x',lx+textW/2).attr('y',ly+1+(li+0.5)*fs*1.45)
