@@ -693,7 +693,6 @@ input[type=color]{
       <div class="cgroup">
         <label class="citem sel" onclick="toggleCheck(this,'lbl_val')"><span class="cbox">✓</span><span class="rtext">Valore numerico</span></label>
         <label class="citem" onclick="toggleCheck(this,'lbl_nome')"><span class="cbox">✓</span><span class="rtext">Nome del territorio</span></label>
-        <label class="citem" onclick="toggleCheck(this,'lbl_sigla')"><span class="cbox">✓</span><span class="rtext">Sigla provincia (es. MI, RM…)</span></label>
       </div>
     </div>
     <div>
@@ -968,7 +967,7 @@ const S = {
   borderColor: '#ffffff', borderWidth: 0.5,
   mapBg: 'trasparente', mapBgCustom: '#e8edf5',
   tema: 'chiaro',
-  lblVal: true, lblNome: false, lblSigla: false,
+  lblVal: true, lblNome: false,
   lblPos: 'centro',
   lblSize: 'auto', lblSizeCustom: 9,
   lblColor: 'auto', lblColorCustom: '#333333',
@@ -1010,7 +1009,7 @@ function toggleCheck(el, key) {
   const on = el.classList.contains('sel');
   // map key → state field
   const map = {
-    lbl_val:'lblVal', lbl_nome:'lblNome', lbl_sigla:'lblSigla', lbl_bold:'lblBold',
+    lbl_val:'lblVal', lbl_nome:'lblNome', lbl_bold:'lblBold',
     lbl_shadow:'lblShadow', lbl_upper:'lblUpper', lbl_bg:'lblBg',
     compare:'compare', tooltip:'tooltip', click:'click',
     slider:'slider', zoom:'zoom', search:'search',
@@ -1351,7 +1350,7 @@ function saveTemplate() {
     palette: S.palette, colStart: S.colStart, colEnd: S.colEnd,
     borderColor: S.borderColor, borderWidth: S.borderWidth,
     mapBg: S.mapBg, tema: S.tema,
-    lblVal: S.lblVal, lblNome: S.lblNome, lblSigla: S.lblSigla, lblPos: S.lblPos,
+    lblVal: S.lblVal, lblNome: S.lblNome, lblPos: S.lblPos,
     lblSize: S.lblSize, lblSizeCustom: S.lblSizeCustom,
     lblColor: S.lblColor, lblColorCustom: S.lblColorCustom,
     lblBold: S.lblBold, lblShadow: S.lblShadow, lblUpper: S.lblUpper, lblBg: S.lblBg,
@@ -1401,7 +1400,7 @@ function applyStateToUI() {
   });
   // Checkboxes — reset then apply
   const checkMap = [
-    ['lbl_val','lblVal'],['lbl_nome','lblNome'],['lbl_sigla','lblSigla'],['lbl_bold','lblBold'],
+    ['lbl_val','lblVal'],['lbl_nome','lblNome'],['lbl_bold','lblBold'],
     ['lbl_shadow','lblShadow'],['lbl_upper','lblUpper'],['lbl_bg','lblBg'],
     ['tooltip','tooltip'],['click','click'],['slider','slider'],
     ['zoom','zoom'],['search','search'],['exportpng','exportpng'],['animation','animation'],
@@ -1553,7 +1552,7 @@ function showResult() {
     ['Territorio', S.territory], ['Visualizzazione', S.vizType],
     ['Scala', S.scala], ['Palette', S.palette], ['Tema', S.tema],
     ['Formato numeri', S.numFmt], ['Font', resolveFont()],
-    ['Etichette', [S.lblVal?'Valore':'',S.lblNome?'Nome':'',S.lblSigla?'Sigla':''].filter(Boolean).join('+') || 'Nessuna'],
+    ['Etichette', [S.lblVal?'Valore':'',S.lblNome?'Nome':''].filter(Boolean).join('+') || 'Nessuna'],
     ['Posizione etichette', S.lblPos], ['Interattività',
       [S.tooltip?'Tooltip':'',S.zoom?'Zoom':'',S.search?'Cerca':'',S.exportpng?'PNG':''].filter(Boolean).join(' · ')],
     ['Gruppi evidenziati', S.highlights.length || 'Nessuno'],
@@ -1776,25 +1775,72 @@ function switchData(n){
   const animCSS = S.animation ? `@keyframes fadeInProv{from{opacity:0}to{opacity:1}}.area{animation:fadeInProv .5s ease forwards;opacity:0;}` : '';
   const animCode = S.animation ? `mapG.selectAll('.area').style('animation-delay',(d,i)=>i*1.5+'ms');` : '';
 
-  // Leader lines label code
-  const labelCode = (S.lblVal || S.lblNome || S.lblSigla) ? `
+  // Leader lines label code — sistema a gomito ortogonale
+  const labelCode = (S.lblVal || S.lblNome) ? `
   const labG=svgMap.append('g').attr('pointer-events','none');
   ${shadowFilter ? `(function(){const defs=svgMap.select('defs').empty()?svgMap.append('defs'):svgMap.select('defs');defs.html(defs.html()+'${shadowFilter.replace(/'/g,"\\'")}');})();` : ''}
 
-  // Bounding box reale della mappa
+  // Calcola bounding box reale della mappa Italia
   let mX0=Infinity,mY0=Infinity,mX1=-Infinity,mY1=-Infinity;
   geoData.features.forEach(feat=>{
     const b=path.bounds(feat);
     if(b[0][0]<mX0)mX0=b[0][0]; if(b[0][1]<mY0)mY0=b[0][1];
     if(b[1][0]>mX1)mX1=b[1][0]; if(b[1][1]>mY1)mY1=b[1][1];
   });
-  const MAP_PAD=16;
+  const MAP_PAD=18; // distanza label dal bordo mappa
 
-  // PASSATA 1: raccoglie tutti gli item
-  const allLblItems=[];
+  // Slot occupati sui 4 bordi per collision detection
+  const slots={L:[],R:[],T:[],B:[]};
+  function slotFree(side,pos,size){
+    const pad=3;
+    return !slots[side].some(s=>pos+size+pad>s.pos&&pos-pad<s.pos+s.size);
+  }
+  function addSlot(side,pos,size){slots[side].push({pos,size});}
+
+  // Trova posizione libera sul bordo più vicino, scorrendo se occupato
+  function findBorderPos(cx,cy,textW,textH){
+    const dL=cx-mX0, dR=mX1-cx, dT=cy-mY0, dB=mY1-cy;
+    const sides=[
+      {s:'L',d:dL},{s:'R',d:dR},{s:'T',d:dT},{s:'B',d:dB}
+    ].sort((a,b)=>a.d-b.d);
+
+    for(const {s} of sides){
+      // Posizione base: allineata al centroide
+      let basePos = (s==='L'||s==='R') ? cy-textH/2 : cx-textW/2;
+      const size  = (s==='L'||s==='R') ? textH : textW;
+      const limit = (s==='L'||s==='R') ? [mY0, mY1-size] : [mX0, mX1-size];
+
+      // Prova basePos poi scorre in entrambe le direzioni
+      const step=size+4;
+      const attempts=[0,...Array.from({length:12},(_, i)=>(i%2===0?1:-1)*Math.ceil((i+2)/2))];
+      for(const delta of attempts){
+        const pos=Math.max(limit[0], Math.min(limit[1], basePos+delta*step));
+        if(slotFree(s, pos, size)){
+          addSlot(s, pos, size);
+          // Coordinate finali della label
+          let lx,ly,ex,ey;
+          if(s==='L'){
+            lx=mX0-MAP_PAD-textW; ly=pos;
+            ex=mX0-MAP_PAD; ey=pos+textH/2;
+          } else if(s==='R'){
+            lx=mX1+MAP_PAD; ly=pos;
+            ex=mX1+MAP_PAD; ey=pos+textH/2;
+          } else if(s==='T'){
+            lx=pos; ly=mY0-MAP_PAD-textH;
+            ex=pos+textW/2; ey=mY0-MAP_PAD;
+          } else {
+            lx=pos; ly=mY1+MAP_PAD;
+            ex=pos+textW/2; ey=mY1+MAP_PAD;
+          }
+          return {lx,ly,ex,ey,s};
+        }
+      }
+    }
+    return null;
+  }
+
   geoData.features.forEach(feat=>{
     const name=feat.properties[GEO_PROP]||'';
-    const sigla=feat.properties['prov_acr']||feat.properties['sigla']||'';
     const v=lookup(name);
     const c=path.centroid(feat);
     if(isNaN(c[0])||isNaN(c[1]))return;
@@ -1805,153 +1851,44 @@ function switchData(n){
     const t=(v!==null&&maxVal>minVal)?(${S.scala==='logaritmica'?`Math.log(Math.max(1,v)/Math.max(1,minVal))/Math.log(Math.max(2,maxVal/Math.max(1,minVal)))`:S.scala==='quantili'?'0.5':`(v-minVal)/Math.max(1,maxVal-minVal)`}):0;
     const tc=${lblColorCode};
     const lines=[];
-    ${S.lblSigla ? `if(sigla)lines.push(sigla);` : ''}
     ${S.lblNome ? `lines.push(name.length>9?name.slice(0,8)+'…':name);` : ''}
-    ${S.lblVal ? `if(v!==null)lines.push(fmt(v));` : ''}
+    ${S.lblVal ? `lines.push(v!==null?fmt(v):'');` : ''}
     const validLines=lines.filter(Boolean);
     if(!validLines.length)return;
     const maxChars=validLines.reduce((mx,l)=>Math.max(mx,l.length),0);
-    const textW=maxChars*fs*0.64;
-    const textH=validLines.length*fs*1.45;
-    const useLeader=${S.lblPos === 'leader' ? 'true' : 'false'} && (textW>areaW*0.82||areaW<20||areaH<14);
+    const textW=maxChars*fs*0.62;
+    const textH=validLines.length*fs*1.4;
 
-    // Punto di partenza della linea: NON il centroide ma il punto del
-    // PERIMETRO della provincia più vicino al bordo mappa di destinazione.
-    // Questo risolve Vercelli/Biella e casi simili dove il centroide
-    // cade dentro un'altra provincia.
-    let lineStartX=c[0], lineStartY=c[1];
+    const useLeader=${S.lblPos === 'leader' ? 'true' : 'false'} && (textW>areaW*0.85 || areaW<20 || areaH<14);
+
     if(useLeader){
-      // Qual è il bordo mappa più vicino al centroide?
-      const dL=c[0]-mX0, dR=mX1-c[0], dT=c[1]-mY0, dB=mY1-c[1];
-      const minD=Math.min(dL,dR,dT,dB);
-      // Usa il punto del bounding box della provincia sul lato corretto
-      if(minD===dL){ lineStartX=bounds[0][0]; lineStartY=c[1]; }
-      else if(minD===dR){ lineStartX=bounds[1][0]; lineStartY=c[1]; }
-      else if(minD===dT){ lineStartX=c[0]; lineStartY=bounds[0][1]; }
-      else { lineStartX=c[0]; lineStartY=bounds[1][1]; }
-    }
-
-    allLblItems.push({name,sigla,v,c,lineStartX,lineStartY,areaW,areaH,fs,tc,validLines,textW,textH,bounds,useLeader});
-  });
-
-  // PASSATA 2: assegna bordo a ogni leader, poi ordina per posizione
-  // per garantire ZERO incroci (label in ordine spaziale = linee in ordine spaziale)
-  function assignSide(lsX,lsY){
-    const dL=lsX-mX0, dR=mX1-lsX, dT=lsY-mY0, dB=mY1-lsY;
-    const mapH=mY1-mY0, mapW=mX1-mX0;
-    // Top e bottom hanno soglia: la provincia deve essere entro il 22% del bordo
-    // altrimenti viene mandata al bordo laterale più vicino
-    const threshV=mapH*0.22;
-    const threshH=mapW*0.18;
-    // Candidati validi: solo bordi entro soglia
-    const candidates=[];
-    if(dL<=threshH) candidates.push({s:0,d:dL});
-    if(dR<=threshH) candidates.push({s:1,d:dR});
-    if(dT<=threshV) candidates.push({s:2,d:dT});
-    if(dB<=threshV) candidates.push({s:3,d:dB});
-    if(candidates.length>0){
-      candidates.sort((a,b)=>a.d-b.d);
-      return candidates[0].s;
-    }
-    // Nessun bordo entro soglia: usa il laterale più vicino
-    return dL<dR?0:1;
-  }
-  // Pre-assegna il bordo a tutti i leader
-  allLblItems.forEach(item=>{
-    if(item.useLeader) item.side=assignSide(item.lineStartX,item.lineStartY);
-  });
-
-  // Conta quante label per bordo — il bordo top (2) si satura facilmente
-  // Se una label va al bordo top ma ce ne sono già troppe, mandala al bordo laterale
-  const sideCount={0:0,1:0,2:0,3:0};
-  const maxPerBorder={0:999,1:999,2:12,3:999}; // max 12 in top
-  allLblItems.forEach(item=>{
-    if(!item.useLeader)return;
-    sideCount[item.side]++;
-    if(item.side===2 && sideCount[2]>maxPerBorder[2]){
-      // Ridirigi al bordo laterale più vicino
-      const dL=item.lineStartX-mX0, dR=mX1-item.lineStartX;
-      item.side=dL<dR?0:1;
-    }
-  });
-
-  // Ordina: prima inline, poi leader raggruppati per bordo e
-  // ordinati per posizione LUNGO quel bordo (no incroci garantiti)
-  allLblItems.sort((a,b)=>{
-    if(!a.useLeader&&!b.useLeader)return 0;
-    if(!a.useLeader)return -1;
-    if(!b.useLeader)return 1;
-    if(a.side!==b.side)return a.side-b.side;
-    // Stesso bordo: ordina per posizione lungo il bordo
-    if(a.side===0||a.side===1) return a.lineStartY-b.lineStartY;
-    return a.lineStartX-b.lineStartX;
-  });
-
-  // Pack consecutivo per bordo — le label vengono posizionate
-  // nell'ordine esatto in cui arrivano (già ordinate per posizione sorgente).
-  // Questo garantisce ZERO incroci: linee ordinate = label ordinate.
-  const borderCursor={0:mY0+2, 1:mY0+2, 2:mX0+2, 3:mX0+2};
-  const GAP=3;
-
-  function assignBorderPos(side,textW,textH){
-    const isV=(side===0||side===1);
-    const size=isV?textH:textW;
-    const lo=isV?mY0+2:mX0+2;
-    const hi=isV?mY1-2:mX1-2;
-    // Se il cursore è andato oltre il limite, torna all'inizio (wrap)
-    if(borderCursor[side]+size>hi) borderCursor[side]=lo;
-    const pos=borderCursor[side];
-    borderCursor[side]+=size+GAP;
-    let lx,ly,ex,ey;
-    if(side===0){lx=mX0-MAP_PAD-textW;ly=pos;ex=mX0-MAP_PAD+2;ey=pos+textH/2;}
-    else if(side===1){lx=mX1+MAP_PAD;ly=pos;ex=mX1+MAP_PAD-2;ey=pos+textH/2;}
-    else if(side===2){lx=pos;ly=mY0-MAP_PAD-textH;ex=pos+textW/2;ey=mY0-MAP_PAD+2;}
-    else{lx=pos;ly=mY1+MAP_PAD;ex=pos+textW/2;ey=mY1+MAP_PAD-2;}
-    return {lx,ly,ex,ey};
-  }
-
-  // DISEGNA
-  allLblItems.forEach(item=>{
-    const {c,lineStartX,lineStartY,fs,tc,validLines,textW,textH,useLeader,side}=item;
-
-    if(!useLeader){
-      // ── INLINE ──
-      ${S.lblBg ? `labG.append('rect').attr('x',c[0]-textW/2-2).attr('y',c[1]-textH/2-1).attr('width',textW+4).attr('height',textH+2).attr('rx',2).attr('fill','rgba(255,255,255,0.55)');` : ''}
+      const pos=findBorderPos(c[0],c[1],textW,textH);
+      if(!pos)return;
+      const {lx,ly,ex,ey}=pos;
+      // Linea centroide → bordo mappa → label
+      labG.append('line')
+        .attr('x1',c[0]).attr('y1',c[1]).attr('x2',ex).attr('y2',ey)
+        .attr('stroke','rgba(120,130,150,0.65)').attr('stroke-width',.7);
+      labG.append('circle').attr('cx',c[0]).attr('cy',c[1]).attr('r',2).attr('fill','rgba(120,130,150,0.8)');
+      labG.append('rect').attr('x',lx-1).attr('y',ly-1)
+        .attr('width',textW+2).attr('height',textH+2)
+        .attr('rx',2).attr('fill','rgba(255,255,255,0.88)');
       validLines.forEach((l,li)=>{
         const el=labG.append('text')
-          .attr('x',c[0]).attr('y',c[1]+(li-(validLines.length-1)/2)*fs*1.45)
+          .attr('x',lx+textW/2).attr('y',ly+(li+0.5)*fs*1.4)
+          .attr('text-anchor','middle').attr('dominant-baseline','middle')
+          .attr('font-size',fs).attr('fill','#222').text(l);
+        ${S.lblBold ? `el.attr('font-weight','700');` : ''}
+      });
+    } else {
+      ${bgRect}
+      validLines.forEach((l,li)=>{
+        const el=labG.append('text')
+          .attr('x',c[0]).attr('y',c[1]+(li-(validLines.length-1)/2)*fs*1.3)
           .attr('text-anchor','middle').attr('dominant-baseline','middle')
           .attr('font-size',fs).attr('fill',tc).text(l);
         ${S.lblBold ? `el.attr('font-weight','700');` : ''}
         ${S.lblShadow ? `el.attr('filter','url(#lbl-shadow)');` : ''}
-      });
-    } else {
-      // ── LEADER LINE ──
-      const pos=assignBorderPos(side,textW,textH);
-      const {lx,ly,ex,ey}=pos;
-
-      // Linea: centroide → punto perimetro provincia → punto bordo mappa → label
-      // Se lineStart coincide col centroide usa linea diretta
-      const pts=(Math.abs(lineStartX-c[0])>2||Math.abs(lineStartY-c[1])>2)
-        ? \`\${c[0]},\${c[1]} \${lineStartX},\${lineStartY} \${ex},\${ey}\`
-        : \`\${c[0]},\${c[1]} \${ex},\${ey}\`;
-      labG.append('polyline').attr('points',pts)
-        .attr('stroke','rgba(100,115,140,0.5)').attr('stroke-width',.75)
-        .attr('fill','none').attr('stroke-linejoin','round');
-      labG.append('circle').attr('cx',c[0]).attr('cy',c[1])
-        .attr('r',1.8).attr('fill','rgba(100,115,140,0.65)');
-
-      // Box etichetta
-      labG.append('rect').attr('x',lx-1).attr('y',ly-1)
-        .attr('width',textW+2).attr('height',textH+2)
-        .attr('rx',3).attr('fill','rgba(255,255,255,0.95)')
-        .attr('stroke','rgba(120,140,170,0.35)').attr('stroke-width',.6);
-      validLines.forEach((l,li)=>{
-        const el=labG.append('text')
-          .attr('x',lx+textW/2).attr('y',ly+1+(li+0.5)*fs*1.45)
-          .attr('text-anchor','middle').attr('dominant-baseline','middle')
-          .attr('font-size',fs).attr('fill','#1e2840').text(l);
-        ${S.lblBold ? `el.attr('font-weight','700');` : ''}
       });
     }
   });` : '';
@@ -2242,7 +2179,7 @@ renderTemplateList();
 updateProgress();
 updateSummaries();
 function updateSummaries(){
-  document.getElementById('tag5').textContent=[S.lblVal?'Valore':'',S.lblNome?'Nome':'',S.lblSigla?'Sigla':''].filter(Boolean).join('+')||'Nessuna';
+  document.getElementById('tag5').textContent=[S.lblVal?'Valore':'',S.lblNome?'Nome':''].filter(Boolean).join('+')||'Nessuna';
   document.getElementById('tag8').textContent=[S.tooltip?'Tooltip':'',S.zoom?'Zoom':'',S.search?'Cerca':''].filter(Boolean).join('·')||'Nessuna';
 }
 </script>
